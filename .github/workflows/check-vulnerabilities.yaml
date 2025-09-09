@@ -1,0 +1,477 @@
+name: check for vulnerabilities
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches:
+      - main
+      - development
+      - 'release/*'
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to scan'
+        required: false
+        default: ''
+      source_branch:
+        description: 'Source branch to scan'
+        required: false
+        default: ''
+  repository_dispatch:
+    types: [security-scan]
+
+jobs:
+  release:
+    runs-on: ["self-hosted", "macOS", "ARM64", "cidekar", "macos-arm64"]
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      actions: read
+    steps:
+      - name: install github cli
+        run: |
+          # Check if already installed
+          if command -v gh &> /dev/null; then
+            echo "GitHub CLI already available: $(gh --version)"
+            exit 0
+          fi
+
+          echo "Installing GitHub CLI via direct download..."
+
+          # Use latest version or specify a known working version
+          GH_VERSION="2.62.0"
+
+          # Detect platform and architecture
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m)
+
+          # Map architecture names to GitHub CLI conventions
+          case $ARCH in
+            x86_64) GH_ARCH="amd64" ;;
+            aarch64) GH_ARCH="arm64" ;;
+            arm64) GH_ARCH="arm64" ;;
+            *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+          esac
+
+          # Set correct filename format based on OS
+          case $OS in
+            linux)
+              FILENAME="gh_${GH_VERSION}_linux_${GH_ARCH}.tar.gz"
+              EXTRACT_CMD="tar -xzf"
+              ;;
+            darwin)
+              # macOS uses .zip format, not .tar.gz
+              FILENAME="gh_${GH_VERSION}_macOS_${GH_ARCH}.zip"
+              EXTRACT_CMD="unzip -q"
+              ;;
+            *) echo "Unsupported OS: $OS"; exit 1 ;;
+          esac
+
+          DOWNLOAD_URL="https://github.com/cli/cli/releases/download/v${GH_VERSION}/${FILENAME}"
+
+          echo "Downloading: $DOWNLOAD_URL"
+
+          # Create temp directory
+          TEMP_DIR=$(mktemp -d)
+          cd "$TEMP_DIR"
+
+          # Download
+          curl -fsSL "$DOWNLOAD_URL" -o "gh_archive" || {
+            echo "Failed to download GitHub CLI from $DOWNLOAD_URL"
+            echo "File might not exist. Checking available releases..."
+            curl -s "https://api.github.com/repos/cli/cli/releases/latest" | grep "browser_download_url" | grep -E "(macOS|linux)" | head -5
+            exit 1
+          }
+
+          # Extract based on file type
+          $EXTRACT_CMD gh_archive || {
+            echo "Failed to extract archive"
+            exit 1
+          }
+
+          # The extracted directory should match the filename (without extension)
+          case $OS in
+            linux)
+              EXTRACTED_DIR="gh_${GH_VERSION}_linux_${GH_ARCH}"
+              ;;
+            darwin)
+              EXTRACTED_DIR="gh_${GH_VERSION}_macOS_${GH_ARCH}"
+              ;;
+          esac
+
+          # Verify the extracted directory exists
+          if [ ! -d "$EXTRACTED_DIR" ]; then
+            echo "Expected directory $EXTRACTED_DIR not found. Contents:"
+            ls -la
+            exit 1
+          fi
+
+          # Install the binary
+          if [ -w /usr/local/bin ] 2>/dev/null; then
+            cp "${EXTRACTED_DIR}/bin/gh" /usr/local/bin/gh
+            chmod +x /usr/local/bin/gh
+            echo "Installed to /usr/local/bin/gh"
+          else
+            # Install to user directory
+            mkdir -p "$HOME/bin"
+            cp "${EXTRACTED_DIR}/bin/gh" "$HOME/bin/gh"
+            chmod +x "$HOME/bin/gh"
+            echo "$HOME/bin" >> $GITHUB_PATH
+            export PATH="$HOME/bin:$PATH"
+            echo "Installed to $HOME/bin/gh"
+          fi
+
+          # Cleanup
+          cd /
+          rm -rf "$TEMP_DIR"
+
+          # Verify installation
+          if command -v gh &> /dev/null; then
+            echo "✅ GitHub CLI installed successfully: $(gh --version)"
+          else
+            echo "❌ GitHub CLI installation failed"
+            exit 1
+          fi
+
+      - name: add go (production)
+        uses: actions/setup-go@v5
+        if: ${{ !env.ACT }}
+        with:
+          go-version: '1.21'
+          cache: false
+
+      - name: add go (testing)
+        if: ${{ env.ACT }}
+        run: |
+          echo "Checking for Go installation..."
+
+          if command -v go &> /dev/null; then
+            echo "✅ Go already available: $(go version)"
+          else
+            echo "Installing Go without package manager..."
+
+            # Create directory in user space (no sudo needed)
+            mkdir -p $HOME/go-install
+            cd $HOME/go-install
+
+            # Download Go using curl (more likely to be available than wget)
+            if command -v curl &> /dev/null; then
+              echo "Downloading Go 1.21.5..."
+              curl -sL https://go.dev/dl/go1.21.5.linux-amd64.tar.gz -o go.tar.gz
+
+              # Extract to home directory (no root needed)
+              tar -xzf go.tar.gz
+
+              # Set up paths
+              export GOROOT="$HOME/go-install/go"
+              export PATH="$GOROOT/bin:$PATH"
+              echo "$GOROOT/bin" >> $GITHUB_PATH
+
+              echo "✅ Go installed to: $GOROOT"
+            else
+              echo "❌ curl not available, cannot install Go"
+              exit 1
+            fi
+          fi
+
+          # Final verification
+          echo "Go version check:"
+          go version
+
+      - name: setup go directories for act
+        if: ${{ env.ACT }}
+        run: |
+          mkdir -p /github/workspace/.gocache
+          mkdir -p /github/workspace/.gotmp
+          chmod -R 777 /github/workspace/.gocache /github/workspace/.gotmp
+
+      - name: checkout the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate dependency list and count
+        run: |
+          echo "Generating dependency list..."
+
+          # Generate the dependency list
+          go list -json -deps ./... > go.list
+
+          # Count dependencies using Go instead of jq
+          DEP_COUNT=$(go list -deps ./... | wc -l | tr -d ' ')
+
+          # Alternative method: count unique modules
+          MODULE_COUNT=$(go list -m all | wc -l | tr -d ' ')
+
+          # Get direct dependencies from go.mod
+          DIRECT_DEPS=$(go list -m -f '{{if not .Main}}{{.Path}}{{end}}' all | wc -l | tr -d ' ')
+
+          echo "DEPENDENCY_COUNT=$DEP_COUNT" >> $GITHUB_ENV
+          echo "MODULE_COUNT=$MODULE_COUNT" >> $GITHUB_ENV
+          echo "DIRECT_DEPS=$DIRECT_DEPS" >> $GITHUB_ENV
+
+          echo "📊 Dependency Analysis:"
+          echo "  - Total packages: $DEP_COUNT"
+          echo "  - Total modules: $MODULE_COUNT"
+          echo "  - Direct dependencies: $DIRECT_DEPS"
+
+      - name: Install Nancy
+        run: |
+          echo "Installing Nancy..."
+          go install github.com/sonatype-nexus-community/nancy@latest
+          nancy --version
+
+      - name: Run Nancy scan with authentication
+        env:
+          OSS_INDEX_USERNAME: ${{ secrets.OSS_INDEX_USERNAME }}
+          OSS_INDEX_TOKEN: ${{ secrets.OSS_INDEX_TOKEN }}
+        run: |
+          echo "Running Nancy security scan with authentication..."
+          echo "📦 Packages to scan: $DEPENDENCY_COUNT"
+          echo "📚 Modules to scan: $MODULE_COUNT"
+
+          # Run Nancy with authentication and capture detailed output
+          START_TIME=$(date +%s)
+
+          if go list -json -deps ./... | nancy sleuth \
+            --username "$OSS_INDEX_USERNAME" \
+            --token "$OSS_INDEX_TOKEN" \
+            --output text \
+            --loud > nancy-detailed.txt 2>&1; then
+            SCAN_STATUS="success"
+            VULNERABILITY_COUNT=0
+          else
+            SCAN_STATUS="vulnerabilities_found"
+            VULNERABILITY_COUNT=$(grep -c "Vulnerability found\|CVE-" nancy-detailed.txt 2>/dev/null || echo "0")
+          fi
+
+          echo "nancy-detailed.txt"
+          cat nancy-detailed.txt
+
+          END_TIME=$(date +%s)
+          SCAN_DURATION=$((END_TIME - START_TIME))
+
+          echo "SCAN_STATUS=$SCAN_STATUS" >> $GITHUB_ENV
+          echo "VULNERABILITY_COUNT=$VULNERABILITY_COUNT" >> $GITHUB_ENV
+          echo "SCAN_DURATION=$SCAN_DURATION" >> $GITHUB_ENV
+
+          echo "✅ Scan completed in ${SCAN_DURATION}s"
+          echo "📊 Vulnerabilities found: $VULNERABILITY_COUNT"
+
+          # Also generate clean output for summary
+          if [ "$SCAN_STATUS" = "success" ]; then
+            echo "✅ No vulnerabilities found" > nancy-summary.txt
+          else
+            go list -json -deps ./... | nancy sleuth \
+              --username "$OSS_INDEX_USERNAME" \
+              --token "$OSS_INDEX_TOKEN" \
+              --output text > nancy-summary.txt 2>&1 || true
+          fi
+
+      - name: Generate comprehensive report
+        run: |
+          cat > nancy-report.md << EOF
+          ## 🔍 Nancy Security Scan Results
+
+          | Field | Value |
+          |-------|--------|
+          | 📅 Scan Date | $(date) |
+          | 📦 Repository | ${{ github.repository }} |
+          | 🔀 Event | ${{ github.event_name }} |
+          | 🏃 Workflow Run | [\#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          | 📊 Total Packages | $DEPENDENCY_COUNT |
+          | 📚 Total Modules | $MODULE_COUNT |
+          | 📋 Direct Dependencies | $DIRECT_DEPS |
+          | ⏱️ Scan Duration | ${SCAN_DURATION}s |
+          | 🔑 Authenticated | ✅ Yes (1,200 req/hour) |
+          | 🖥️ Runner | Self-hosted macOS ARM64 |
+
+          ---
+
+          EOF
+
+          if [ "$SCAN_STATUS" = "success" ]; then
+            cat >> nancy-report.md << EOF
+          ### ✅ SCAN PASSED
+
+          🎉 **No vulnerabilities detected!**
+
+          All $DEPENDENCY_COUNT packages across $MODULE_COUNT modules are secure. Great job maintaining a secure codebase!
+
+          **Dependency Summary:**
+          - 📦 **$DEPENDENCY_COUNT** total packages scanned
+          - 📚 **$MODULE_COUNT** modules analyzed
+          - 📋 **$DIRECT_DEPS** direct dependencies
+
+          EOF
+          else
+            cat >> nancy-report.md << EOF
+          ### ❌ VULNERABILITIES FOUND
+
+          ⚠️ **Found $VULNERABILITY_COUNT vulnerabilities** across $DEPENDENCY_COUNT packages.
+
+          **Scan Overview:**
+          - 📦 **$DEPENDENCY_COUNT** packages scanned
+          - 📚 **$MODULE_COUNT** modules analyzed
+          - 📋 **$DIRECT_DEPS** direct dependencies
+          - 🚨 **$VULNERABILITY_COUNT** vulnerabilities detected
+
+          <details>
+          <summary>📋 Click to view detailed scan results</summary>
+
+          \`\`\`
+          $(cat nancy-summary.txt)
+          \`\`\`
+
+          </details>
+
+          ### 🔧 Recommended Actions:
+
+          1. **Review each vulnerability** listed above
+          2. **Update vulnerable packages** to secure versions:
+             \`\`\`bash
+             go get -u vulnerable/package@secure-version
+             go mod tidy
+             \`\`\`
+          3. **Re-run the scan** to verify fixes
+          4. **Check dependency tree** for transitive dependencies:
+             \`\`\`bash
+             go mod graph | grep vulnerable-package
+             \`\`\`
+          5. **Consider alternatives** if updates aren't available
+          6. **Add exceptions** for false positives using \`.nancy-ignore\`
+
+          EOF
+          fi
+
+          cat >> nancy-report.md << EOF
+          ---
+
+          **Scan Details:**
+          - **Rate Limit:** Authenticated (1,200 req/hour vs 120 anonymous)
+          - **Database:** [Sonatype OSS Index](https://ossindex.sonatype.org/)
+          - **Tool:** [Nancy v$(nancy --version 2>/dev/null | head -1 || echo "latest")]
+
+          *🤖 Automated security scanning by [Nancy](https://github.com/sonatype-nexus-community/nancy)*
+          EOF
+
+      - name: Show scan summary
+        run: |
+          echo "=================== SCAN SUMMARY ==================="
+          echo "📦 Packages scanned: $DEPENDENCY_COUNT"
+          echo "📚 Modules analyzed: $MODULE_COUNT"
+          echo "📋 Direct dependencies: $DIRECT_DEPS"
+          echo "⏱️ Scan duration: ${SCAN_DURATION}s"
+          echo "🚨 Vulnerabilities: $VULNERABILITY_COUNT"
+          echo "✅ Status: $SCAN_STATUS"
+          echo "🖥️ Runner: Self-hosted macOS ARM64"
+          echo "=================================================="
+
+      - name: Upload scan report
+        uses: actions/upload-artifact@v4
+        with:
+          name: nancy-security-report
+          path: |
+            nancy-report.md
+            nancy-detailed.txt
+            nancy-summary.txt
+          retention-days: 30
+
+      - name: Set job status
+        run: |
+          if [ "$SCAN_STATUS" = "success" ]; then
+            echo "✅ Security scan passed - no vulnerabilities found"
+            exit 0
+          else
+            echo "❌ Security scan failed - $VULNERABILITY_COUNT vulnerabilities found"
+            echo "Review the scan results and update vulnerable dependencies"
+            exit 1
+          fi
+
+      - name: Comment on PR (REST API)
+        if: |
+          (github.event_name == 'pull_request') ||
+          (github.event_name == 'repository_dispatch' && github.event.client_payload.pr_number != '')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔍 Attempting PR comment via REST API..."
+
+          # Determine PR number based on trigger type
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            PR_NUMBER="${{ github.event.number }}"
+            echo "Direct PR event - PR #$PR_NUMBER"
+          elif [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            PR_NUMBER="${{ github.event.client_payload.pr_number }}"
+            echo "Repository dispatch event - PR #$PR_NUMBER"
+          else
+            echo "No PR to comment on for event: ${{ github.event_name }}"
+            exit 0
+          fi
+
+          # Validate PR number
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+            echo "No valid PR number found, skipping comment"
+            exit 0
+          fi
+
+          echo "Processing PR #$PR_NUMBER"
+
+          # Check if comment already exists using REST API
+          echo "Checking for existing comments..."
+          EXISTING_COMMENTS=$(curl -s \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/$PR_NUMBER/comments")
+
+          # Look for existing Nancy comment
+          COMMENT_ID=$(echo "$EXISTING_COMMENTS" | jq -r '.[] | select(.body | contains("🔍 Nancy Security Scan Results")) | .id' | head -1)
+
+          # Prepare comment body (escape for JSON)
+          COMMENT_BODY=$(cat nancy-report.md | jq -Rs .)
+
+          if [ "$COMMENT_ID" != "" ] && [ "$COMMENT_ID" != "null" ]; then
+            echo "Updating existing comment ID: $COMMENT_ID"
+
+            # Update existing comment
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              -X PATCH \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/comments/$COMMENT_ID" \
+              -d "{\"body\": $COMMENT_BODY}")
+
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "✅ Comment updated successfully"
+            else
+              echo "❌ Failed to update comment (HTTP $HTTP_STATUS)"
+              echo "📁 Report available as artifact instead"
+            fi
+
+          else
+            echo "Creating new comment on PR #$PR_NUMBER"
+
+            # Create new comment
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              -X POST \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
+              -d "{\"body\": $COMMENT_BODY}")
+
+            if [ "$HTTP_STATUS" = "201" ]; then
+              echo "✅ Comment created successfully"
+            else
+              echo "❌ Failed to create comment (HTTP $HTTP_STATUS)"
+              echo "📁 Report available as artifact instead"
+            fi
+          fi
+
+          # Always show summary regardless of comment success
+          echo ""
+          echo "📊 Security Scan Summary:"
+          echo "- Status: $SCAN_STATUS"
+          echo "- Vulnerabilities: $VULNERABILITY_COUNT"
+          echo "- Packages scanned: $DEPENDENCY_COUNT"
+          echo "📁 Full report: nancy-security-report artifact"

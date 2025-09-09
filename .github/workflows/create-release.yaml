@@ -13,6 +13,12 @@ jobs:
     runs-on: ["self-hosted", "macOS", "ARM64", "cidekar", "macos-arm64"]
     if: github.event.pull_request.merged == true
     steps:
+      - name: clean workspace on self-hosted runner
+        run: |
+          # Remove everything in the workspace
+          rm -rf ${{ github.workspace }}/*
+          rm -rf ${{ github.workspace }}/.git*
+
       - name: validate is a release pr
         id: check_release
         run: |

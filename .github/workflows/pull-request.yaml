@@ -267,6 +267,7 @@ jobs:
           fi
 
       - name: create pr from workflow release branch
+        id: create-pr
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACTOR_NAME: ${{ env.GITHUB_ACTOR || github.actor }}
@@ -325,15 +326,48 @@ jobs:
           *This PR was created automatically by GitHub Actions*"
           fi
 
-          gh pr create \
-            --title "Auto Release PR: ${{ steps.version.outputs.VERSION }}" \
-            --body "$PR_BODY" \
-            --head "$SOURCE_BRANCH" \
-            --base "${{ env.BASE_BRANCH }}" \
-            --label "automated,needs-review" \
-            $ASSIGNEE_FLAG
+          PR_URL=$(gh pr create \
+          --title "Auto Release PR: ${{ steps.version.outputs.VERSION }}" \
+          --body "$PR_BODY" \
+          --head "$SOURCE_BRANCH" \
+          --base "${{ env.BASE_BRANCH }}" \
+          --label "automated,needs-review" \
+          $ASSIGNEE_FLAG)
+
+          echo "PR created: $PR_URL"
+          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
 
           echo "✅ PR created for ${SOURCE_BRANCH} → ${{ env.BASE_BRANCH }}"
+
+      - name: trigger security scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Extract PR number
+          PR_URL="${{ steps.create-pr.outputs.pr_url }}"
+
+          if [[ $PR_URL =~ /pull/([0-9]+)/?$ ]]; then
+            PR_NUMBER="${BASH_REMATCH[1]}"
+            echo "Extracted PR number: $PR_NUMBER"
+          else
+            echo "Failed to extract PR number from: $PR_URL"
+            # Alternative extraction method
+            PR_NUMBER=$(echo "$PR_URL" | sed -n 's/.*\/pull\/\([0-9]\+\).*/\1/p')
+            if [ -z "$PR_NUMBER" ]; then
+              echo "Alternative extraction also failed"
+              exit 1
+            fi
+            echo "Alternative extraction succeeded: $PR_NUMBER"
+          fi
+
+          SOURCE_BRANCH="release/${{ steps.version.outputs.VERSION }}"
+
+          # Trigger security scan via repository dispatch
+          gh api repos/${{ github.repository }}/dispatches \
+            --method POST \
+            --field event_type=security-scan \
+            --field client_payload[pr_number]="$PR_NUMBER" \
+            --field client_payload[branch]="$SOURCE_BRANCH"
 
       - name: clean go cache
         run: |
