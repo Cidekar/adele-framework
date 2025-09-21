@@ -69,12 +69,6 @@ func (a *Adele) New(rootPath string) error {
 
 	a.BootstrapMiddleware()
 
-	muxRouter, err := a.BootstrapMux(rootPath)
-	if err != nil {
-		return err
-	}
-
-	a.Routes = muxRouter.(*mux.Mux)
 	a.Debug, _ = strconv.ParseBool(os.Getenv("APP_DEBUG"))
 	a.RootPath = rootPath
 	a.Version = Version
@@ -84,6 +78,13 @@ func (a *Adele) New(rootPath string) error {
 		renderer:    Helpers.Getenv("RENDERER", "jet"),
 		sessionType: Helpers.Getenv("SESSION_TYPE"),
 	}
+
+	muxRouter, err := a.BootstrapMux(rootPath)
+	if err != nil {
+		return err
+	}
+
+	a.Routes = muxRouter.(*mux.Mux)
 
 	a.BoostrapFilesystem()
 
@@ -332,6 +333,7 @@ func (a *Adele) BootstrapMux(rootPath string) (http.Handler, error) {
 		AllowCredentials: corsConfig.AllowCredentials,
 		MaxAge:           corsConfig.MaxAge,
 	}
+
 	mux.Use(crs.Handler(corsOptions))
 
 	if a.Debug {
