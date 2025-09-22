@@ -51,11 +51,11 @@ func (v *Validation) Valid() bool {
 //
 // Example:
 //
-//	validator.Required(r, "name", "email")
-//	if !validator.Valid() {
-//	    errorString := validator.ToString()
-//	    // Returns: " Name is required Email is required"
-//	}
+//		validator.Required(r, "name", "email")
+//		if !validator.Valid() {
+//		    errorString := validator.ToString()
+//	 Returns: " Name is required Email is required"
+//		}
 func (v *Validation) ToString() string {
 	b := new(bytes.Buffer)
 	for _, value := range v.Errors {
@@ -69,8 +69,8 @@ func (v *Validation) ToString() string {
 //
 // Example:
 //
-//	validator.AddError("email", "The :attribute field must be valid")
-//	// Results in: "The email field must be valid"
+//		validator.AddError("email", "The :attribute field must be valid")
+//	 Results in: "The email field must be valid"
 func (v *Validation) AddError(key, message string) {
 	if _, exists := v.Errors[key]; !exists {
 		fieldName := formatFieldName(key)
@@ -83,9 +83,9 @@ func (v *Validation) AddError(key, message string) {
 //
 // Example:
 //
-//	if validator.Has("username", r) {
-//	    // Field exists and has a value
-//	}
+//		if validator.Has("username", r) {
+//	 Field exists and has a value
+//		}
 func (v *Validation) Has(field string, r *http.Request) bool {
 	isInRequest := r.Form.Get(field)
 	return isInRequest != ""
@@ -96,8 +96,8 @@ func (v *Validation) Has(field string, r *http.Request) bool {
 //
 // Example:
 //
-//	validator.Required(r, "name", "email", "password")
-//	// Checks that all three fields have values
+// validator.Required(r, "name", "email", "password")
+// Checks that all three fields have values
 func (v *Validation) Required(r *http.Request, fields ...string) {
 	for _, field := range fields {
 		value := strings.TrimSpace(r.Form.Get(field))
@@ -172,7 +172,8 @@ func (v *Validation) RequiredJSON(json interface{}, fields ...string) {
 //	}
 //	user := &User{Name: "John", Email: ""}
 //	validator.HasJSON(user, "Name", "Email")
-//	// Name passes, Email fails validation
+//
+// Name passes, Email fails validation
 func (v *Validation) HasJSON(json interface{}, fields ...string) {
 	reflectedType := reflect.TypeOf(json)
 	reflectedKind := reflectedType.Kind()
@@ -226,7 +227,8 @@ func (v *Validation) Check(ok bool, key, message string) {
 //
 //	email := r.Form.Get("email")
 //	validator.IsEmail("email", email)
-//	// Validates format like "user@example.com"
+//
+// Validates format like "user@example.com"
 func (v *Validation) IsEmail(field, value string) {
 	if !govalidator.IsEmail(value) {
 		v.AddError(field, "Invalid email address")
@@ -240,7 +242,8 @@ func (v *Validation) IsEmail(field, value string) {
 //
 //	email := r.Form.Get("email")
 //	validator.IsEmailInPublicDomain("email", email)
-//	// Checks if email domain is reachable and public
+//
+// Checks if email domain is reachable and public
 func (v *Validation) IsEmailInPublicDomain(field, value string) {
 	if !govalidator.IsExistingEmail(value) {
 		v.AddError(field, "Invalid email address")
@@ -254,7 +257,8 @@ func (v *Validation) IsEmailInPublicDomain(field, value string) {
 //
 //	quantity := r.Form.Get("quantity")
 //	validator.IsInt("quantity", quantity)
-//	// Accepts "123", "-45", but rejects "12.5", "abc"
+//
+// Accepts "123", "-45", but rejects "12.5", "abc"
 func (v *Validation) IsInt(field, value string) {
 	_, err := strconv.Atoi(value)
 	if err != nil {
@@ -269,7 +273,8 @@ func (v *Validation) IsInt(field, value string) {
 //
 //	price := r.Form.Get("price")
 //	validator.IsFloat("price", price)
-//	// Accepts "12.99", "0.5", "123", but rejects "abc", "12.34.56"
+//
+// Accepts "12.99", "0.5", "123", but rejects "abc", "12.34.56"
 func (v *Validation) IsFloat(field, value string) {
 	_, err := strconv.ParseFloat(value, 64)
 	if err != nil {
@@ -282,13 +287,30 @@ func (v *Validation) IsFloat(field, value string) {
 //
 // Example:
 //
-//	birthDate := r.Form.Get("birth_date")
-//	validator.IsDateISO("birth_date", birthDate)
-//	// Accepts "2023-12-25", "1990-01-01", but rejects "12/25/2023", "invalid"
+//		birthDate := r.Form.Get("birth_date")
+//		validator.IsDateISO("birth_date", birthDate)
+//	 Accepts "2023-12-25", "1990-01-01", but rejects "12/25/2023", "invalid"
 func (v *Validation) IsDateISO(field, value string) {
 	_, err := time.Parse("2006-01-02", value)
 	if err != nil {
 		v.AddError(field, "This field must be a date in the form of YYYY-MM-DD")
+	}
+}
+
+// StringLength validates that a field's value is within the specified length range.
+//
+// Example:
+//
+//	username := r.Form.Get("username")
+//	validator.StringLength("username", username, 3, 50) // between 3-50 chars
+//	validator.StringLength("username", username, 0, 50) // max 50 chars
+func (v *Validation) StringLength(field, value string, minLength, maxLength int) {
+	length := len(value)
+
+	if length < minLength {
+		v.AddError(field, fmt.Sprintf("The %s field must be at least %d characters", field, minLength))
+	} else if length > maxLength {
+		v.AddError(field, fmt.Sprintf("The %s field must not exceed %d characters", field, maxLength))
 	}
 }
 
@@ -299,7 +321,8 @@ func (v *Validation) IsDateISO(field, value string) {
 //
 //	username := r.Form.Get("username")
 //	validator.NoSpaces("username", username)
-//	// Accepts "john_doe", "user123", but rejects "john doe", "user name"
+//
+// Accepts "john_doe", "user123", but rejects "john doe", "user name"
 func (v *Validation) NoSpaces(field, value string) {
 	if govalidator.HasWhitespace(value) {
 		v.AddError(field, "Spaces are not allowed")
@@ -313,7 +336,9 @@ func (v *Validation) NoSpaces(field, value string) {
 //
 //	name := r.Form.Get("name")
 //	validator.NotEmpty("name", name)
-//	// Or with custom message:
+//
+// Or with custom message:
+//
 //	validator.NotEmpty("name", name, "Name cannot be blank")
 func (v *Validation) NotEmpty(field, value string, message ...string) {
 	if strings.TrimSpace(value) == "" {
@@ -333,7 +358,8 @@ func (v *Validation) NotEmpty(field, value string, message ...string) {
 //	password := r.Form.Get("password")
 //	validator.Password("password", password)        // Uses default 12 char minimum
 //	validator.Password("password", password, 8)     // Uses custom 8 char minimum
-//	// Requires uppercase, lowercase, and minimum length
+//
+// Requires uppercase, lowercase, and minimum length
 func (v *Validation) Password(field string, value string, length ...int) {
 	minLength := 12
 	if len(length) > 0 {
@@ -374,7 +400,8 @@ func (v *Validation) Password(field string, value string, length ...int) {
 //	password := r.Form.Get("password")
 //	validator.PasswordUncompromised("password", password)     // Any breach count fails
 //	validator.PasswordUncompromised("password", password, 5)  // Only fails if seen 5+ times
-//	// Checks against HaveIBeenPwned database securely
+//
+// Checks against HaveIBeenPwned database securely
 func (v *Validation) PasswordUncompromised(field string, value string, threshold ...int) {
 	thresholdVerifier := 1
 	if len(threshold) > 0 {
