@@ -102,7 +102,7 @@ func (v *Validation) Required(r *http.Request, fields ...string) {
 	for _, field := range fields {
 		value := strings.TrimSpace(r.Form.Get(field))
 		if value == "" {
-			v.AddError(field, fmt.Sprintf("The %s field is required.", field))
+			v.AddError(field, fmt.Sprintf("The %s field is required.", ":attribute"))
 		}
 	}
 }
@@ -117,6 +117,7 @@ func formatFieldName(field string) string {
 			n = n + " " + (s[i])
 		}
 	}
+	fmt.Println(field, n)
 	return strings.TrimSpace(strings.ToLower(n))
 }
 
