@@ -29,6 +29,19 @@ jobs:
       issues: write
       actions: read
     steps:
+      - name: Test secret availability immediately
+        env:
+          OSS_INDEX_USERNAME: ${{ secrets.OSS_INDEX_USERNAME }}
+          OSS_INDEX_TOKEN: ${{ secrets.OSS_INDEX_TOKEN }}
+          SIGNING_SECRET: ${{ secrets.YOUR_SIGNING_SECRET_NAME }}
+        run: |
+          echo "=== Secret Debug ==="
+          echo "Signing secret available: ${SIGNING_SECRET:+YES}"
+          echo "OSS username available: ${OSS_INDEX_USERNAME:+YES}"
+          echo "OSS token available: ${OSS_INDEX_TOKEN:+YES}"
+          echo "Signing secret length: ${#SIGNING_SECRET}"
+          echo "Username length: ${#OSS_INDEX_USERNAME}"
+          echo "Token length: ${#OSS_INDEX_TOKEN}"
       - name: install github cli
         run: |
           # Check if already installed
@@ -227,6 +240,7 @@ jobs:
           OSS_INDEX_USERNAME: ${{ secrets.OSS_INDEX_USERNAME }}
           OSS_INDEX_TOKEN: ${{ secrets.OSS_INDEX_TOKEN }}
         run: |
+
             echo "Running Nancy security scan with authentication..."
             echo "📦 Packages to scan: $DEPENDENCY_COUNT"
             echo "📚 Modules to scan: $MODULE_COUNT"
