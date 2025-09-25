@@ -233,6 +233,7 @@ func (a *Adele) BoootstrapMailer() mailer.Mail {
 		APIKey:      os.Getenv("MAILER_KEY"),
 		APIUrl:      os.Getenv("MAILER_URL"),
 	}
+
 	return m
 }
 
