@@ -1,4 +1,4 @@
-name: create pr workflow
+name: pull request internal workflow
 
 env:
   BASE_BRANCH: main

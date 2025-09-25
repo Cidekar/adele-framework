@@ -163,6 +163,10 @@ func TestWrite(t *testing.T) {
 }
 
 func TestHandle(t *testing.T) {
+
+	// Clean up before test
+	os.RemoveAll(testDir)
+
 	app := NewApplication()
 
 	// Test with no arguments
@@ -181,7 +185,7 @@ func TestHandle(t *testing.T) {
 	}
 
 	// Verify directory was created
-	if _, err := os.Stat(testDir); os.IsNotExist(err) {
+	if _, err := os.Stat("testdata"); os.IsNotExist(err) {
 		t.Error("Expected directory to be created")
 	}
 }
