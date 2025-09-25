@@ -253,6 +253,12 @@ func (c *NewApp) Write(name string) error {
 		return err
 	}
 
+	// Save current directory
+	originalDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
 	// Change directories into the git clone and update the default application anme in all
 	// soruce files to the name provided by the command during execution.
 	// Example:
@@ -260,6 +266,12 @@ func (c *NewApp) Write(name string) error {
 	// 	import myapp/models -> awsomeapp/modles
 	os.Chdir(fmt.Sprintf("./%s", name))
 	err = c.UpdateApplicationNameInSource(name)
+	if err != nil {
+		return err
+	}
+
+	// Restore original directory
+	err = os.Chdir(originalDir)
 	if err != nil {
 		return err
 	}

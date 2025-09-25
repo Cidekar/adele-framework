@@ -163,6 +163,10 @@ func TestWrite(t *testing.T) {
 }
 
 func TestHandle(t *testing.T) {
+
+	// Clean up before test
+	os.RemoveAll(testDir)
+
 	app := NewApplication()
 
 	// Test with no arguments
