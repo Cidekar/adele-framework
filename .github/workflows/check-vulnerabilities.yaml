@@ -231,6 +231,30 @@ jobs:
             echo "📦 Packages to scan: $DEPENDENCY_COUNT"
             echo "📚 Modules to scan: $MODULE_COUNT"
 
+            # Debug secret availability
+            echo "🔍 Checking secret availability..."
+            echo "Username variable set: ${OSS_INDEX_USERNAME:+YES}"
+            echo "Token variable set: ${OSS_INDEX_TOKEN:+YES}"
+            echo "Username length: ${#OSS_INDEX_USERNAME}"
+            echo "Token length: ${#OSS_INDEX_TOKEN}"
+
+            # More detailed validation
+            if [ -z "$OSS_INDEX_USERNAME" ]; then
+              echo "❌ OSS_INDEX_USERNAME is empty or unset"
+              echo "Secret reference: \${{ secrets.OSS_INDEX_USERNAME }}"
+              exit 1
+            fi
+
+            if [ -z "$OSS_INDEX_TOKEN" ]; then
+              echo "❌ OSS_INDEX_TOKEN is empty or unset"
+              echo "Secret reference: \${{ secrets.OSS_INDEX_TOKEN }}"
+              exit 1
+            fi
+
+            echo "✅ Credentials validated successfully"
+            echo "🔐 Username: ${OSS_INDEX_USERNAME:0:3}***"
+            echo "🔐 Token: ${OSS_INDEX_TOKEN:0:8}***""
+
             # Validate credentials first
             if [ -z "$OSS_INDEX_USERNAME" ] || [ -z "$OSS_INDEX_TOKEN" ]; then
               echo "❌ OSS Index credentials not found in secrets"
