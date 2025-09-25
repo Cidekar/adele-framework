@@ -73,7 +73,11 @@ jobs:
         run: go clean -testcache
 
       - name: Run all tests
-        run: go test ./...
+        timeout-minutes: 5
+        run: |
+          echo "Starting tests at $(date)"
+          go test -v -timeout=3m ./...
+          echo "Tests completed at $(date)"
 
       - name: clean go cache
         run: |
