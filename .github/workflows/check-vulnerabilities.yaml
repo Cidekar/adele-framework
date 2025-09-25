@@ -23,29 +23,14 @@ on:
 jobs:
   release:
     runs-on: ["self-hosted", "macOS", "ARM64", "cidekar", "macos-arm64"]
+    # Only run on internal PRs, not forks
+    if: github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       pull-requests: write
       issues: write
       actions: read
     steps:
-      - name: Test secret availability immediately
-        env:
-          OSS_INDEX_USERNAME: ${{ secrets.OSS_INDEX_USERNAME }}
-          OSS_INDEX_TOKEN: ${{ secrets.OSS_INDEX_TOKEN }}
-          QUILL_NOTARY_KEY_ID: ${{ secrets.QUILL_NOTARY_KEY_ID }}
-          QUILL_NOTARY_ISSUER: ${{ secrets.QUILL_NOTARY_ISSUER }}
-        run: |
-          echo "=== Secret Debug ==="
-          echo "notary secret id available: ${QUILL_NOTARY_KEY_ID:+YES}"
-          echo "notary secret issuer available: ${QUILL_NOTARY_ISSUER:+YES}"
-          echo "OSS username available: ${OSS_INDEX_USERNAME:+YES}"
-          echo "OSS token available: ${OSS_INDEX_TOKEN:+YES}"
-          echo "Signing secret length: ${#SIGNING_SECRET}"
-          echo "Username length: ${#OSS_INDEX_USERNAME}"
-          echo "Token length: ${#OSS_INDEX_TOKEN}"
-
-
       - name: install github cli
         run: |
           # Check if already installed
@@ -244,34 +229,9 @@ jobs:
           OSS_INDEX_USERNAME: ${{ secrets.OSS_INDEX_USERNAME }}
           OSS_INDEX_TOKEN: ${{ secrets.OSS_INDEX_TOKEN }}
         run: |
-
             echo "Running Nancy security scan with authentication..."
             echo "📦 Packages to scan: $DEPENDENCY_COUNT"
             echo "📚 Modules to scan: $MODULE_COUNT"
-
-            # Debug secret availability
-            echo "🔍 Checking secret availability..."
-            echo "Username variable set: ${OSS_INDEX_USERNAME:+YES}"
-            echo "Token variable set: ${OSS_INDEX_TOKEN:+YES}"
-            echo "Username length: ${#OSS_INDEX_USERNAME}"
-            echo "Token length: ${#OSS_INDEX_TOKEN}"
-
-            # More detailed validation
-            if [ -z "$OSS_INDEX_USERNAME" ]; then
-              echo "❌ OSS_INDEX_USERNAME is empty or unset"
-              echo "Secret reference: \${{ secrets.OSS_INDEX_USERNAME }}"
-              exit 1
-            fi
-
-            if [ -z "$OSS_INDEX_TOKEN" ]; then
-              echo "❌ OSS_INDEX_TOKEN is empty or unset"
-              echo "Secret reference: \${{ secrets.OSS_INDEX_TOKEN }}"
-              exit 1
-            fi
-
-            echo "✅ Credentials validated successfully"
-            echo "🔐 Username: ${OSS_INDEX_USERNAME:0:3}***"
-            echo "🔐 Token: ${OSS_INDEX_TOKEN:0:8}***""
 
             # Validate credentials first
             if [ -z "$OSS_INDEX_USERNAME" ] || [ -z "$OSS_INDEX_TOKEN" ]; then
