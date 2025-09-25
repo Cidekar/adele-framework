@@ -33,15 +33,19 @@ jobs:
         env:
           OSS_INDEX_USERNAME: ${{ secrets.OSS_INDEX_USERNAME }}
           OSS_INDEX_TOKEN: ${{ secrets.OSS_INDEX_TOKEN }}
-          SIGNING_SECRET: ${{ secrets.YOUR_SIGNING_SECRET_NAME }}
+          QUILL_NOTARY_KEY_ID: ${{ secrets.QUILL_NOTARY_KEY_ID }}
+          QUILL_NOTARY_ISSUER: ${{ secrets.QUILL_NOTARY_ISSUER }}
         run: |
           echo "=== Secret Debug ==="
-          echo "Signing secret available: ${SIGNING_SECRET:+YES}"
+          echo "notary secret id available: ${QUILL_NOTARY_KEY_ID:+YES}"
+          echo "notary secret issuer available: ${QUILL_NOTARY_ISSUER:+YES}"
           echo "OSS username available: ${OSS_INDEX_USERNAME:+YES}"
           echo "OSS token available: ${OSS_INDEX_TOKEN:+YES}"
           echo "Signing secret length: ${#SIGNING_SECRET}"
           echo "Username length: ${#OSS_INDEX_USERNAME}"
           echo "Token length: ${#OSS_INDEX_TOKEN}"
+
+
       - name: install github cli
         run: |
           # Check if already installed
