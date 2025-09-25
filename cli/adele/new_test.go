@@ -185,7 +185,7 @@ func TestHandle(t *testing.T) {
 	}
 
 	// Verify directory was created
-	if _, err := os.Stat("testdata"); os.IsNotExist(err) {
+	if _, err := os.Stat(testDir); os.IsNotExist(err) {
 		t.Error("Expected directory to be created")
 	}
 }
