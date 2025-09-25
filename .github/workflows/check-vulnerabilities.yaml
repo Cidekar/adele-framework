@@ -227,48 +227,87 @@ jobs:
           OSS_INDEX_USERNAME: ${{ secrets.OSS_INDEX_USERNAME }}
           OSS_INDEX_TOKEN: ${{ secrets.OSS_INDEX_TOKEN }}
         run: |
-          echo "Running Nancy security scan with authentication..."
-          echo "📦 Packages to scan: $DEPENDENCY_COUNT"
-          echo "📚 Modules to scan: $MODULE_COUNT"
+            echo "Running Nancy security scan with authentication..."
+            echo "📦 Packages to scan: $DEPENDENCY_COUNT"
+            echo "📚 Modules to scan: $MODULE_COUNT"
 
-          # Run Nancy with authentication and capture detailed output
-          START_TIME=$(date +%s)
+            # Validate credentials first
+            if [ -z "$OSS_INDEX_USERNAME" ] || [ -z "$OSS_INDEX_TOKEN" ]; then
+              echo "❌ OSS Index credentials not found in secrets"
+              echo "Please add OSS_INDEX_USERNAME and OSS_INDEX_TOKEN to repository secrets"
+              exit 1
+            fi
 
-          if go list -json -deps ./... | nancy sleuth \
-            --username "$OSS_INDEX_USERNAME" \
-            --token "$OSS_INDEX_TOKEN" \
-            --output text \
-            --loud > nancy-detailed.txt 2>&1; then
-            SCAN_STATUS="success"
-            VULNERABILITY_COUNT=0
-          else
-            SCAN_STATUS="vulnerabilities_found"
-            VULNERABILITY_COUNT=$(grep -c "Vulnerability found\|CVE-" nancy-detailed.txt 2>/dev/null || echo "0")
-          fi
+            echo "🔐 Authentication: Username=${OSS_INDEX_USERNAME:0:3}***, Token length=${#OSS_INDEX_TOKEN}"
 
-          echo "nancy-detailed.txt"
-          cat nancy-detailed.txt
+            # Run Nancy with authentication and capture detailed output
+            START_TIME=$(date +%s)
 
-          END_TIME=$(date +%s)
-          SCAN_DURATION=$((END_TIME - START_TIME))
-
-          echo "SCAN_STATUS=$SCAN_STATUS" >> $GITHUB_ENV
-          echo "VULNERABILITY_COUNT=$VULNERABILITY_COUNT" >> $GITHUB_ENV
-          echo "SCAN_DURATION=$SCAN_DURATION" >> $GITHUB_ENV
-
-          echo "✅ Scan completed in ${SCAN_DURATION}s"
-          echo "📊 Vulnerabilities found: $VULNERABILITY_COUNT"
-
-          # Also generate clean output for summary
-          if [ "$SCAN_STATUS" = "success" ]; then
-            echo "✅ No vulnerabilities found" > nancy-summary.txt
-          else
-            go list -json -deps ./... | nancy sleuth \
+            echo "🔍 Starting vulnerability scan..."
+            if go list -json -deps ./... | nancy sleuth \
               --username "$OSS_INDEX_USERNAME" \
               --token "$OSS_INDEX_TOKEN" \
-              --output text > nancy-summary.txt 2>&1 || true
-          fi
+              --output text \
+              --loud > nancy-detailed.txt 2>&1; then
 
+              # Success - no vulnerabilities found
+              SCAN_STATUS="success"
+              VULNERABILITY_COUNT=0
+              echo "✅ Scan completed successfully - no vulnerabilities found"
+
+            else
+              # Non-zero exit - determine if it's auth failure or vulnerabilities
+              if grep -q "401 Unauthorized\|error accessing OSS Index\|authentication" nancy-detailed.txt; then
+                echo "❌ Authentication failed - check your OSS Index credentials"
+                echo "Error details:"
+                cat nancy-detailed.txt
+                exit 1
+              else
+                # Real vulnerabilities found
+                SCAN_STATUS="vulnerabilities_found"
+                VULNERABILITY_COUNT=$(grep -c -i "vulnerability\|cve-\|vulnerable" nancy-detailed.txt 2>/dev/null || echo "0")
+                echo "⚠️ Vulnerabilities detected: $VULNERABILITY_COUNT"
+              fi
+            fi
+
+            echo ""
+            echo "=== Scan Output ==="
+            cat nancy-detailed.txt
+            echo "=================="
+            echo ""
+
+            END_TIME=$(date +%s)
+            SCAN_DURATION=$((END_TIME - START_TIME))
+
+            # Clean variables before setting (remove any problematic characters)
+            SCAN_STATUS=$(echo "$SCAN_STATUS" | tr -d '\n\r')
+            VULNERABILITY_COUNT=$(echo "$VULNERABILITY_COUNT" | tr -d '\n\r')
+            SCAN_DURATION=$(echo "$SCAN_DURATION" | tr -d '\n\r')
+
+            # Validate variables before setting environment
+            if [ -z "$SCAN_STATUS" ]; then SCAN_STATUS="unknown"; fi
+            if [ -z "$VULNERABILITY_COUNT" ]; then VULNERABILITY_COUNT="0"; fi
+            if [ -z "$SCAN_DURATION" ]; then SCAN_DURATION="0"; fi
+
+            # Set environment variables safely
+            echo "SCAN_STATUS=${SCAN_STATUS}" >> $GITHUB_ENV
+            echo "VULNERABILITY_COUNT=${VULNERABILITY_COUNT}" >> $GITHUB_ENV
+            echo "SCAN_DURATION=${SCAN_DURATION}" >> $GITHUB_ENV
+
+            echo "✅ Scan completed in ${SCAN_DURATION}s"
+            echo "📊 Vulnerabilities found: $VULNERABILITY_COUNT"
+            echo "🔍 Status: $SCAN_STATUS"
+
+            # Generate clean summary output
+            if [ "$SCAN_STATUS" = "success" ]; then
+              echo "✅ No vulnerabilities found" > nancy-summary.txt
+            else
+              echo "⚠️ Generating detailed vulnerability summary..."
+              go list -json -deps ./... | nancy sleuth \
+                --username "$OSS_INDEX_USERNAME" \
+                --token "$OSS_INDEX_TOKEN" \
+                --output text > nancy-summary.txt 2>&1 || true
+            fi
       - name: Generate comprehensive report
         run: |
           cat > nancy-report.md << EOF
