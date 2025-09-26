@@ -117,7 +117,6 @@ func formatFieldName(field string) string {
 			n = n + " " + (s[i])
 		}
 	}
-	fmt.Println(field, n)
 	return strings.TrimSpace(strings.ToLower(n))
 }
 
