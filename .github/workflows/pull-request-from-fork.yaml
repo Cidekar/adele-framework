@@ -1,0 +1,85 @@
+name: pull request from repository fork
+
+on:
+  pull_request:
+    branches:
+      - development
+
+jobs:
+  release:
+    runs-on: ["self-hosted", "macOS", "ARM64", "cidekar", "macos-arm64"]
+    steps:
+      - name: add go (production)
+        uses: actions/setup-go@v5
+        if: ${{ !env.ACT }}
+        with:
+          go-version: '1.23.0'
+          cache: false
+
+      - name: add go (testing)
+        if: ${{ env.ACT }}
+        run: |
+          echo "Checking for Go installation..."
+
+          if command -v go &> /dev/null; then
+            echo "✅ Go already available: $(go version)"
+          else
+            echo "Installing Go without package manager..."
+
+            # Create directory in user space (no sudo needed)
+            mkdir -p $HOME/go-install
+            cd $HOME/go-install
+
+            # Download Go using curl (more likely to be available than wget)
+            if command -v curl &> /dev/null; then
+              echo "Downloading Go 1.21.5..."
+              curl -sL https://go.dev/dl/go1.21.5.linux-amd64.tar.gz -o go.tar.gz
+
+              # Extract to home directory (no root needed)
+              tar -xzf go.tar.gz
+
+              # Set up paths
+              export GOROOT="$HOME/go-install/go"
+              export PATH="$GOROOT/bin:$PATH"
+              echo "$GOROOT/bin" >> $GITHUB_PATH
+
+              echo "✅ Go installed to: $GOROOT"
+            else
+              echo "❌ curl not available, cannot install Go"
+              exit 1
+            fi
+          fi
+
+          # Final verification
+          echo "Go version check:"
+          go version
+
+      - name: setup go directories for act
+        if: ${{ env.ACT }}
+        run: |
+          mkdir -p /github/workspace/.gocache
+          mkdir -p /github/workspace/.gotmp
+          chmod -R 777 /github/workspace/.gocache /github/workspace/.gotmp
+
+      - name: checkout the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: download dependencies
+        run: go mod download
+
+      - name: Clean test cache
+        run: go clean -testcache
+
+      - name: Run all tests
+        timeout-minutes: 5
+        run: |
+          echo "Starting tests at $(date)"
+          go test -v -timeout=3m ./...
+          echo "Tests completed at $(date)"
+
+      - name: clean go cache
+        run: |
+          go clean -modcache
+          go clean -cache
