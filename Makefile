@@ -55,7 +55,7 @@ build\:help:
 .SILENT:
 test\:all:
 	@go clean -testcache
-	make test:cache test:cli test:database test:filesystem test:helpers test:httpserver test:logger test:middleware test:mailer test:middleware test:mux test:session test:render test:rpcserver
+	make test:cache test:cli test:database test:filesystem test:helpers test:httpserver test:logger test:middleware test:mailer test:middleware test:mux test:provider test:session test:render test:rpcserver
 test\:cache:
 	@go test ./cache/...
 test\:cli:
@@ -76,6 +76,8 @@ test\:mailer:
 	@go test ./mailer
 test\:mux:
 	@go test ./mux
+test\:provider:
+	@go test ./provider
 test\:session:
 	@go test ./session
 test\:render:

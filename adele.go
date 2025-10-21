@@ -105,8 +105,28 @@ func (a *Adele) New(rootPath string) error {
 		return err
 	}
 
+	//a.BootstrapServiceProviders()
+
 	return nil
 }
+
+// TODO:
+// Describe that the method is going to do and provide when called...
+// func (a *Adele) BootstrapServiceProviders() {
+// 	//a.Provider = provider.New(a)
+// 	p := &provider.Provider{
+// 		//App:              a,
+// 		EnabledProviders: make(map[string]bool),
+// 		ProviderConfigs:  make(map[string]map[string]interface{}),
+// 	}
+
+// 	a.Provider = p
+// 	if err := a.Provider.LoadProviders(); err != nil {
+// 		a.Log.Error(err)
+// 		os.Exit(1)
+// 	}
+
+// }
 
 // Initializes and sets up a database connection for the application—establishes a database
 // connection during application startup and stores it in the Adele struct.

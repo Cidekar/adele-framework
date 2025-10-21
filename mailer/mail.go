@@ -217,9 +217,6 @@ func (m *Mail) buildHTMLMessage(msg Message) (string, error) {
 
 	var _, err = os.Stat(tmply)
 
-	fmt.Println("buildHTMLMessage:", err)
-	fmt.Println("!os.IsExist(err):", !os.IsExist(err))
-
 	if !os.IsExist(err) {
 		formattedMessage, err := m.buildJetEmail(msg)
 		if err != nil {
