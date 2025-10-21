@@ -11,6 +11,7 @@ import (
 	"github.com/cidekar/adele-framework/mailer"
 	"github.com/cidekar/adele-framework/middleware"
 	"github.com/cidekar/adele-framework/mux"
+	"github.com/cidekar/adele-framework/provider"
 	"github.com/cidekar/adele-framework/render"
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
@@ -29,6 +30,7 @@ type Adele struct {
 	Mail             mailer.Mail
 	middleware       middleware.Middleware
 	MaintenanceMode  bool
+	Provider         *provider.Provider
 	Render           *render.Render
 	Routes           *mux.Mux
 	RootPath         string

@@ -41,7 +41,7 @@ release:
     ### ⏲️ Quick Start
     #### 💾 Installation
     **Option 1: Download Binary (Recommended)**
-    1. 🌐 Download the Adele binary from the [GitHub releases page](https://github.com/harrisonde/adele-framework/releases)
+    1. 🌐 Download the Adele binary from the [GitHub releases page](https://github.com/cidekar/adele-framework/releases)
     2. 🪂 Extract the archive for your OS/architecture
     3. 🛣️ Move the binary to a directory in your PATH:
       ```sh
