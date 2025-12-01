@@ -21,6 +21,8 @@ require (
 	github.com/go-chi/httprate v0.15.0
 	github.com/go-git/go-git/v5 v5.16.2
 	github.com/go-sql-driver/mysql v1.9.0
+	github.com/gobuffalo/pop v4.13.1+incompatible
+	github.com/golang-migrate/migrate/v4 v4.19.0
 	github.com/gomodule/redigo v1.9.2
 	github.com/joho/godotenv v1.5.1
 	github.com/justinas/nosurf v1.2.0
@@ -97,14 +99,12 @@ require (
 	github.com/gobuffalo/nulls v0.4.2 // indirect
 	github.com/gobuffalo/packd v1.0.2 // indirect
 	github.com/gobuffalo/plush/v4 v4.1.16 // indirect
-	github.com/gobuffalo/pop v4.13.1+incompatible // indirect
 	github.com/gobuffalo/tags/v3 v3.1.4 // indirect
 	github.com/gobuffalo/validate v2.0.4+incompatible // indirect
 	github.com/gobuffalo/validate/v3 v3.3.3 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/gofrs/uuid v4.2.0+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang-migrate/migrate/v4 v4.19.0 // indirect
 	github.com/golang/glog v1.2.4 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
