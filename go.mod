@@ -1,8 +1,8 @@
 module github.com/cidekar/adele-framework
 
-go 1.23.0
+go 1.24.0
 
-toolchain go1.23.4
+toolchain go1.24.4
 
 replace google.golang.org/genproto => google.golang.org/genproto/googleapis/api v0.0.0-20250818200422-3122310a409c
 
@@ -50,7 +50,7 @@ require (
 	github.com/CloudyKit/fastprinter v0.0.0-20200109182630-33d98a066a53 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
-	github.com/ProtonMail/go-crypto v1.1.6 // indirect
+	github.com/ProtonMail/go-crypto v1.3.0 // indirect
 	github.com/PuerkitoBio/goquery v1.10.3 // indirect
 	github.com/SparkPost/gosparkpost v0.2.0 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect

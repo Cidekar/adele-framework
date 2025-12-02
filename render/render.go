@@ -52,7 +52,7 @@ func (a *Render) InertiaPage(w http.ResponseWriter, r *http.Request, template st
 		"csrf":  csrfToken,
 	})
 	if err != nil {
-		log.Printf(fmt.Sprintf("%s", err))
+		log.Printf("%s", err)
 		return err
 	}
 
