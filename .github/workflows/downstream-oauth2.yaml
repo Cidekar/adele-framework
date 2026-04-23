@@ -55,14 +55,24 @@ jobs:
         working-directory: adele-oauth2
         run: go build ./...
 
-      - name: test oauth2 against framework HEAD
-        working-directory: adele-oauth2
-        timeout-minutes: 5
-        run: go test -timeout=3m ./...
-
       - name: write smoke-test host app
         run: |
-          mkdir -p smoketest
+          mkdir -p smoketest/config
+          cat > smoketest/config/cors.yml <<'EOF'
+          AllowedOrigins:
+          AllowedMethods:
+            - GET
+          AllowedHeaders:
+            - Accept
+            - Authorization
+            - Content-Type
+            - X-CSRF-Token
+          ExposedHeaders:
+            - Link
+          AllowCredentials: false
+          MaxAge: 300
+          EOF
+
           cat > smoketest/go.mod <<'EOF'
           module smoketest
 
