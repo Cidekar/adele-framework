@@ -391,7 +391,19 @@ func (a *Adele) BootstrapRender() *render.Render {
 // caching system during application startup based on environment variables.
 func (a *Adele) BootstrapCache(rootPath string) error {
 	if cache.UsesRedis() {
-		pool, err := redisdriver.CreateRedisPool(Helpers.Getenv("REDIS_MAX_IDEL", "50"), Helpers.Getenv("REDIS_MAX_ACTIVE_CONNECTIONS", "10000"), Helpers.Getenv("REDIS_TIMEOUT", "240"), Helpers.Getenv("REDIS_HOST", "localhost"), Helpers.Getenv("REDIS_PORT", "6380"))
+		host := Helpers.Getenv("REDIS_HOST", "localhost") + ":" + Helpers.Getenv("REDIS_PORT", "6379")
+		maxIdle := Helpers.Getenv("REDIS_MAX_IDLE", "")
+		if maxIdle == "" {
+			maxIdle = Helpers.Getenv("REDIS_MAX_IDEL", "50")
+		}
+		pool, err := redisdriver.CreateRedisPool(
+			maxIdle,
+			Helpers.Getenv("REDIS_MAX_ACTIVE_CONNECTIONS", "10000"),
+			Helpers.Getenv("REDIS_TIMEOUT", "240"),
+			host,
+			Helpers.Getenv("REDIS_USERNAME", ""),
+			Helpers.Getenv("REDIS_PASSWORD", ""),
+		)
 		if err != nil {
 			return err
 		}
