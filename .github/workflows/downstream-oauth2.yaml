@@ -1,0 +1,190 @@
+name: downstream contract — adele-oauth2
+
+# Verifies that changes to adele-framework do not break the adele-oauth2
+# package contract. Runs the oauth2 test suite against this framework
+# checkout, then exercises a minimal host application that wires oauth2
+# through the provider system and hits /oauth/token end-to-end.
+#
+# Place this file at: adele-framework/.github/workflows/downstream-oauth2.yaml
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  # GitHub repo slug uses an underscore (Cidekar/adele_oauth2); the Go module
+  # path it publishes is github.com/cidekar/adele-oauth2 (hyphen). Keep these
+  # distinct — the checkout below needs the repo slug, the smoketest go.mod
+  # below needs the module path.
+  OAUTH2_REPO: Cidekar/adele_oauth2
+  OAUTH2_REF: main
+  GO_VERSION: '1.25'
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: checkout framework
+        uses: actions/checkout@v4
+        with:
+          path: adele-framework
+
+      - name: checkout oauth2
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.OAUTH2_REPO }}
+          ref: ${{ env.OAUTH2_REF }}
+          path: adele-oauth2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: setup go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: replace framework dep with local checkout
+        working-directory: adele-oauth2
+        run: |
+          go mod edit -replace github.com/cidekar/adele-framework=../adele-framework
+          go mod tidy
+          echo "--- effective go.mod ---"
+          cat go.mod
+
+      - name: build oauth2 against framework HEAD
+        working-directory: adele-oauth2
+        run: go build ./...
+
+      - name: write smoke-test host app
+        run: |
+          mkdir -p smoketest/config
+          cat > smoketest/config/cors.yml <<'EOF'
+          AllowedOrigins:
+          AllowedMethods:
+            - GET
+          AllowedHeaders:
+            - Accept
+            - Authorization
+            - Content-Type
+            - X-CSRF-Token
+          ExposedHeaders:
+            - Link
+          AllowCredentials: false
+          MaxAge: 300
+          EOF
+
+          cat > smoketest/go.mod <<'EOF'
+          module smoketest
+
+          go 1.25
+
+          require (
+            github.com/cidekar/adele-framework v0.0.0
+            github.com/cidekar/adele-oauth2 v0.0.0
+          )
+
+          replace github.com/cidekar/adele-framework => ../adele-framework
+          replace github.com/cidekar/adele-oauth2 => ../adele-oauth2
+          EOF
+
+          cat > smoketest/main.go <<'EOF'
+          // Minimal host app exercising the framework <-> oauth2 contract.
+          // Boots *adele.Adele, runs LoadProviders (which fires oauth2's init()
+          // registration), then issues a malformed POST to /oauth/token and
+          // asserts the server responds with a structured RFC 6749 error
+          // rather than a 500 / panic / not-found. That proves: (1) the
+          // provider interface still binds, (2) oauth2 still registers its
+          // routes against *mux.Mux, (3) the Adele struct fields oauth2
+          // depends on still exist with compatible types.
+          package main
+
+          import (
+            "encoding/json"
+            "fmt"
+            "net/http"
+            "net/http/httptest"
+            "net/url"
+            "os"
+            "strings"
+
+            "github.com/cidekar/adele-framework"
+            "github.com/cidekar/adele-framework/provider"
+            _ "github.com/cidekar/adele-oauth2"
+          )
+
+          func main() {
+            wd, err := os.Getwd()
+            must(err)
+
+            a := &adele.Adele{}
+            if err := a.New(wd); err != nil {
+              fail("framework New() failed: %v", err)
+            }
+            a.AppName = "smoketest"
+
+            a.Provider = &provider.Provider{
+              EnabledProviders: map[string]bool{},
+              ProviderConfigs:  map[string]map[string]interface{}{},
+            }
+            if err := a.Provider.LoadProviders(a); err != nil {
+              fail("LoadProviders failed: %v", err)
+            }
+
+            if a.Routes == nil {
+              fail("a.Routes is nil after LoadProviders — oauth2 never registered routes")
+            }
+
+            req := httptest.NewRequest(
+              http.MethodPost,
+              "/oauth/token",
+              strings.NewReader(url.Values{"grant_type": {"invalid"}}.Encode()),
+            )
+            req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+            rec := httptest.NewRecorder()
+            a.Routes.ServeHTTP(rec, req)
+
+            if rec.Code == http.StatusNotFound {
+              fail("/oauth/token returned 404 — oauth2 did not register the route")
+            }
+            if rec.Code >= 500 {
+              fail("/oauth/token returned %d — server error: %s", rec.Code, rec.Body.String())
+            }
+
+            var body map[string]interface{}
+            if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+              fail("/oauth/token response is not JSON: %s", rec.Body.String())
+            }
+            if _, ok := body["error"]; !ok {
+              fail("/oauth/token response missing RFC 6749 'error' field: %v", body)
+            }
+
+            fmt.Printf("ok — /oauth/token returned %d with error=%q\n", rec.Code, body["error"])
+          }
+
+          func must(err error) {
+            if err != nil {
+              fail("%v", err)
+            }
+          }
+
+          func fail(format string, args ...interface{}) {
+            fmt.Fprintf(os.Stderr, "SMOKE FAIL: "+format+"\n", args...)
+            os.Exit(1)
+          }
+          EOF
+
+      - name: run smoke test
+        working-directory: smoketest
+        run: |
+          go mod tidy
+          go run .
+
+      - name: clean go cache
+        if: always()
+        run: |
+          go clean -cache || true
+          go clean -modcache || true

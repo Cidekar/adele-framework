@@ -44,7 +44,7 @@ func TestMain(m *testing.M) {
 	}
 
 	pool, err := CreateRedisPool("10", "100", "240",
-		host+":"+port.Port(), "")
+		host+":"+port.Port(), "", "")
 	if err != nil {
 		log.Fatalf("Failed to create Redis pool: %v", err)
 	}

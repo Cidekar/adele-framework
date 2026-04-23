@@ -152,7 +152,7 @@ func (c *RedisCache) getKeys(pattern string) ([]string, error) {
 	return keys, nil
 }
 
-func CreateRedisPool(idel, active, timeout, host, password string) (*redis.Pool, error) {
+func CreateRedisPool(idel, active, timeout, host, username, password string) (*redis.Pool, error) {
 
 	maxIdle, err := strconv.Atoi(idel)
 	if err != nil {
@@ -174,8 +174,14 @@ func CreateRedisPool(idel, active, timeout, host, password string) (*redis.Pool,
 		MaxActive:   maxActive,
 		IdleTimeout: time.Duration(idleTimeout) * time.Second,
 		Dial: func() (redis.Conn, error) {
-			return redis.Dial("tcp", host,
-				redis.DialPassword(password))
+			opts := []redis.DialOption{}
+			if username != "" {
+				opts = append(opts, redis.DialUsername(username))
+			}
+			if password != "" {
+				opts = append(opts, redis.DialPassword(password))
+			}
+			return redis.Dial("tcp", host, opts...)
 		},
 
 		TestOnBorrow: func(conn redis.Conn, t time.Time) error {

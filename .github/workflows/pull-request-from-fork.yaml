@@ -13,7 +13,7 @@ jobs:
         uses: actions/setup-go@v5
         if: ${{ !env.ACT }}
         with:
-          go-version: '1.23.0'
+          go-version: '1.25'
           cache: false
 
       - name: add go (testing)
