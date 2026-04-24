@@ -1,0 +1,176 @@
+name: downstream contract — adele-queue
+
+# Verifies that changes to adele-framework do not break the adele-queue
+# package contract. Boots the framework, runs LoadProviders (which fires
+# adele-queue's init() registration + Register + Boot), and confirms the
+# queue provider is wired into the global registry. This is a build- and
+# registration-level contract check only — no jobs are enqueued, no
+# workers are exercised against real work, and no Redis is required
+# (memory backend is the default in the embedded queue.yml).
+#
+# Place this file at: adele-framework/.github/workflows/downstream-queue.yaml
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  # adele-queue publishes as github.com/cidekar/adele-queue and the repo
+  # slug is Cidekar/adele-queue — both use hyphens, unlike adele-oauth2
+  # whose repo slug is Cidekar/adele_oauth2. Keep both literal here so
+  # changes to one do not silently break the other.
+  QUEUE_REPO: Cidekar/adele-queue
+  QUEUE_REF: main
+  GO_VERSION: '1.25'
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: checkout framework
+        uses: actions/checkout@v4
+        with:
+          path: adele-framework
+
+      - name: checkout queue
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.QUEUE_REPO }}
+          ref: ${{ env.QUEUE_REF }}
+          path: adele-queue
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: setup go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: replace framework dep with local checkout
+        working-directory: adele-queue
+        run: |
+          go mod edit -replace github.com/cidekar/adele-framework=../adele-framework
+          go mod tidy
+          echo "--- effective go.mod ---"
+          cat go.mod
+
+      - name: build queue against framework HEAD
+        working-directory: adele-queue
+        run: go build ./...
+
+      - name: write smoke-test host app
+        run: |
+          mkdir -p smoketest/config
+          cat > smoketest/config/cors.yml <<'EOF'
+          AllowedOrigins:
+          AllowedMethods:
+            - GET
+          AllowedHeaders:
+            - Accept
+            - Authorization
+            - Content-Type
+            - X-CSRF-Token
+          ExposedHeaders:
+            - Link
+          AllowCredentials: false
+          MaxAge: 300
+          EOF
+
+          cat > smoketest/go.mod <<'EOF'
+          module smoketest
+
+          go 1.25
+
+          require (
+            github.com/cidekar/adele-framework v0.0.0
+            github.com/cidekar/adele-queue v0.0.0
+          )
+
+          replace github.com/cidekar/adele-framework => ../adele-framework
+          replace github.com/cidekar/adele-queue => ../adele-queue
+          EOF
+
+          cat > smoketest/main.go <<'EOF'
+          // Minimal host app exercising the framework <-> adele-queue contract.
+          // Boots *adele.Adele, then runs LoadProviders which fires the queue's
+          // init() -> Register -> Boot lifecycle. adele-queue does not attach a
+          // field to the Adele struct (unlike oauth2's routes); its contract
+          // is purely the provider interface plus the framework fields it
+          // reads during api.New (a.Log, a.Cache, a.DB, a.RootPath). We
+          // assert the queue provider is present in the global registry
+          // after LoadProviders completes without error. The memory backend
+          // is the default, so no Redis is required and no jobs are
+          // enqueued — this is a registration-level check only.
+          package main
+
+          import (
+            "fmt"
+            "os"
+
+            "github.com/cidekar/adele-framework"
+            "github.com/cidekar/adele-framework/provider"
+            _ "github.com/cidekar/adele-queue"
+          )
+
+          func main() {
+            wd, err := os.Getwd()
+            must(err)
+
+            a := &adele.Adele{}
+            if err := a.New(wd); err != nil {
+              fail("framework New() failed: %v", err)
+            }
+            a.AppName = "smoketest"
+
+            a.Provider = &provider.Provider{
+              EnabledProviders: map[string]bool{},
+              ProviderConfigs:  map[string]map[string]interface{}{},
+            }
+            if err := a.Provider.LoadProviders(a); err != nil {
+              fail("LoadProviders failed: %v", err)
+            }
+
+            found := false
+            for _, p := range provider.GetRegisteredProviders() {
+              if p == nil {
+                continue
+              }
+              if p.Name() == "queue" {
+                found = true
+                break
+              }
+            }
+            if !found {
+              fail("queue provider not present in global registry after LoadProviders — adele-queue init() never fired or framework provider contract changed")
+            }
+
+            fmt.Println("ok — queue registered")
+          }
+
+          func must(err error) {
+            if err != nil {
+              fail("%v", err)
+            }
+          }
+
+          func fail(format string, args ...interface{}) {
+            fmt.Fprintf(os.Stderr, "SMOKE FAIL: "+format+"\n", args...)
+            os.Exit(1)
+          }
+          EOF
+
+      - name: run smoke test
+        working-directory: smoketest
+        run: |
+          go mod tidy
+          go run .
+
+      - name: clean go cache
+        if: always()
+        run: |
+          go clean -cache || true
+          go clean -modcache || true
