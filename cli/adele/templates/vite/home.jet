@@ -1,0 +1,28 @@
+{{extends "./layouts/base.jet"}}
+
+{{block browserTitle()}}Adele{{end}}
+
+{{block css()}}
+
+{{end}}
+
+{{block pageContent()}}
+
+	<div class="h-screen flex flex-col items-center justify-center">
+        <div class="console before:content-['>'] text-pink-100 h-[200px] italic text-center md:text-[64px] text-[44px] font-bold leading-[60px]">
+            <span id="console-text"></span>
+            <div class="console-cursor !inline-block not-italic top-[-4px] left-[10px] opacity-0" id="console">&#95;</div>
+            <div class="text-pink-100 text-sm not-italic font-light md:mt-4">
+                <a class="mx-1" href="login">Login</a>
+                <a class="mx-1" href="legistration">Registration</a>
+                <a class="mx-1" href="/forgot Password">Forgot Password</a>
+                <a class="mx-1" href="/missing-page">Missing Font</a>
+            </div>
+        </div>
+    </div>
+
+{{end}}
+
+{{block js()}}
+
+{{end}}

@@ -5,6 +5,12 @@ export PACKAGE_PUBLICATION_TAG ?=
 export PACKAGE_PUBLICATION_TAG_NEXT ?=
 export OUT ?=
 
+# go.mod requires Go >= the version pinned there. If a contributor's system Go
+# is older, GOTOOLCHAIN=auto lets the go command transparently download and use
+# the required toolchain. ?= keeps the user's value if they've explicitly set
+# GOTOOLCHAIN=local (e.g. air-gapped builds).
+export GOTOOLCHAIN ?= auto
+
 
 ## builds the adele command line tool
 .SILENT:

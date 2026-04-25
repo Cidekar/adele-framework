@@ -42,3 +42,7 @@ func fileExists(fileToCheck string) bool {
 	}
 	return true
 }
+
+func deleteFile(fileToDelete string) error {
+	return os.Remove(fileToDelete)
+}
