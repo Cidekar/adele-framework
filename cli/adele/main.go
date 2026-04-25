@@ -89,6 +89,13 @@ func (c *Cli) Handle() error {
 		if err != nil {
 			return err
 		}
+
+	case "install":
+		c := NewInstall()
+		err := c.Handle()
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

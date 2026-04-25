@@ -125,6 +125,30 @@ func TestCopyFileFromTemplate_NonExistentTemplate(t *testing.T) {
 	}
 }
 
+func TestDeleteFile(t *testing.T) {
+	tempDir := t.TempDir()
+	target := filepath.Join(tempDir, "to_delete.txt")
+
+	if err := os.WriteFile(target, []byte("delete me"), 0644); err != nil {
+		t.Fatalf("Failed to seed file: %v", err)
+	}
+
+	if err := deleteFile(target); err != nil {
+		t.Errorf("deleteFile returned unexpected error: %v", err)
+	}
+
+	if fileExists(target) {
+		t.Error("Expected file to be removed after deleteFile")
+	}
+}
+
+func TestDeleteFile_MissingFile(t *testing.T) {
+	err := deleteFile("/this/file/does/not/exist")
+	if err == nil {
+		t.Error("Expected deleteFile to return error for non-existent file")
+	}
+}
+
 func TestCopyDataToFile_EmptyData(t *testing.T) {
 	tempDir := t.TempDir()
 	targetFile := filepath.Join(tempDir, "empty.txt")

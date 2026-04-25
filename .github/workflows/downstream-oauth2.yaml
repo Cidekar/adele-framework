@@ -15,11 +15,11 @@ on:
   workflow_dispatch:
 
 env:
-  # GitHub repo slug uses an underscore (Cidekar/adele_oauth2); the Go module
-  # path it publishes is github.com/cidekar/adele-oauth2 (hyphen). Keep these
-  # distinct — the checkout below needs the repo slug, the smoketest go.mod
+  # GitHub repo slug (Cidekar/adele-oauth2) and Go module path
+  # (github.com/cidekar/adele-oauth2) both use hyphens. Keep these
+  # literal — the checkout below needs the repo slug, the smoketest go.mod
   # below needs the module path.
-  OAUTH2_REPO: Cidekar/adele_oauth2
+  OAUTH2_REPO: Cidekar/adele-oauth2
   OAUTH2_REF: main
   GO_VERSION: '1.25'
 

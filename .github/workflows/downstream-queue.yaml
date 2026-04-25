@@ -19,9 +19,8 @@ on:
 
 env:
   # adele-queue publishes as github.com/cidekar/adele-queue and the repo
-  # slug is Cidekar/adele-queue — both use hyphens, unlike adele-oauth2
-  # whose repo slug is Cidekar/adele_oauth2. Keep both literal here so
-  # changes to one do not silently break the other.
+  # slug is Cidekar/adele-queue. Keep both literal here so changes to
+  # one do not silently break the other.
   QUEUE_REPO: Cidekar/adele-queue
   QUEUE_REF: main
   GO_VERSION: '1.25'
