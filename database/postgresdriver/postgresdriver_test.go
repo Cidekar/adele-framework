@@ -75,14 +75,14 @@ func TestBuildDSN(t *testing.T) {
 			expected: "host=localhost port=5432 user=user password=p@ssw0rd!#$ dbname=app sslmode=disable timezone=UTC connect_timeout=5",
 		},
 		{
-			name:     "all empty values",
+			name:     "all empty values defaults sslmode to prefer",
 			host:     "",
 			port:     "",
 			user:     "",
 			password: "",
 			dbname:   "",
 			sslmode:  "",
-			expected: "host= port= user= password= dbname= sslmode= timezone=UTC connect_timeout=5",
+			expected: "host= port= user= password= dbname= sslmode=prefer timezone=UTC connect_timeout=5",
 		},
 		{
 			name:     "SSL verify-full mode",
