@@ -10,6 +10,7 @@ require (
 	github.com/alexedwards/scs/v2 v2.9.0
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
 	github.com/aws/aws-sdk-go v1.55.8
+	github.com/bwmarrin/go-alone v0.0.0-20190806015146-742bb55d1631
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/fatih/camelcase v1.0.0
 	github.com/fatih/color v1.18.0

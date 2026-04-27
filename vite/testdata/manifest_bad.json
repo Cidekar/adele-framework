@@ -1,0 +1,13 @@
+{
+  "css/styles.css": {
+    "file": "assets/styles-BtjGmCm7.css",
+    "src": "css/styles.css",
+    "isEntry": true
+  }
+  "js/script.ts": {
+    "file": "assets/script-BRExcXBH.js",
+    "name": "script",
+    "src": "js/script.ts",
+    "isEntry": true
+  }
+}

@@ -1,10 +1,12 @@
 package adele
 
 import (
+	"log"
 	"net"
 
 	"github.com/CloudyKit/jet/v6"
 	"github.com/alexedwards/scs/v2"
+	"github.com/cidekar/adele-framework/auth"
 	"github.com/cidekar/adele-framework/cache"
 	"github.com/cidekar/adele-framework/database"
 	"github.com/cidekar/adele-framework/helpers"
@@ -19,10 +21,13 @@ import (
 
 type Adele struct {
 	AppName          string
+	Auth             *auth.Auth
 	config           config
 	Cache            cache.Cache
 	DB               *database.Database
 	Debug            bool
+	EncryptionKey    string
+	ErrorLog         *log.Logger
 	FileSystem       map[string]interface{}
 	Helpers          *helpers.Helpers
 	JetViews         *jet.Set
@@ -36,6 +41,7 @@ type Adele struct {
 	RootPath         string
 	RPCListener      *net.Listener
 	Scheduler        *cron.Cron
+	Server           Server
 	Session          *scs.SessionManager
 	Version          string
 	ViewsTemplateDir string
@@ -45,4 +51,9 @@ type config struct {
 	port        string
 	renderer    string
 	sessionType string
+}
+
+type Server struct {
+	ServerName string
+	URL        string
 }
