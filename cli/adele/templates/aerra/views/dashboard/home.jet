@@ -1,0 +1,20 @@
+{{extends "../layouts/application.jet"}}
+
+{{block browserTitle()}} Adele {{end}}
+
+{{block pageContent()}}
+    {{include "header"}}
+    <div class="flex items-start bg-pink-50">
+        <div class="bg-pink-140 h-screen w-[20%] text-right p-8">
+             {{include "menu"}}
+        </div>
+        <div class="w-[80%]">
+            <div class="well">
+                <div class="header">
+                    <h1>Dashboad</h1>
+                    <h2>Welcome, {{user.FirstName }}!</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+{{end}}

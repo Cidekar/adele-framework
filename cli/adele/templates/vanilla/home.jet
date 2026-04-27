@@ -13,10 +13,10 @@
             <span id="console-text"></span>
             <div class="console-cursor !inline-block not-italic top-[-4px] left-[10px] opacity-0" id="console">&#95;</div>
             <div class="text-pink-100 text-sm not-italic font-light md:mt-4">
-                <a class="mx-1" href="login">Login</a>
-                <a class="mx-1" href="legistration">Registration</a>
-                <a class="mx-1" href="/forgot Password">Forgot Password</a>
-                <a class="mx-1" href="/missing-page">Missing Font</a>
+                <a class="mx-1" href="/login">Login</a>
+                <a class="mx-1" href="/registration">Registration</a>
+                <a class="mx-1" href="/forgot">Forgot Password</a>
+                <a class="mx-1" href="/404">404 Demo</a>
             </div>
         </div>
     </div>
