@@ -96,6 +96,13 @@ func (c *Cli) Handle() error {
 		if err != nil {
 			return err
 		}
+
+	case "migrate":
+		c := NewMigrate()
+		err := c.Handle()
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
