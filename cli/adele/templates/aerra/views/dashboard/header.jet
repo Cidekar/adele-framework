@@ -1,0 +1,6 @@
+ <div class="flex flex-col justify-center bg-pink-500 min-h-[75px]">
+    <div class="advatar ml-auto mr-10">
+        <div class="name">{{ user.FirstName | upper }}</div>
+    </div>
+</div>
+

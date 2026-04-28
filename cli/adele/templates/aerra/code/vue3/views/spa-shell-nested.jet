@@ -1,0 +1,10 @@
+{{extends "../layouts/application.jet"}}
+
+{{block browserTitle()}}Adele{{end}}
+
+{{block pageContent()}}
+<div id="app"></div>
+{{end}}
+
+{{block js()}}
+{{end}}

@@ -2,13 +2,16 @@ package adele
 
 import (
 	"fmt"
+	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/CloudyKit/jet/v6"
 	"github.com/alexedwards/scs/v2"
+	"github.com/cidekar/adele-framework/auth"
 	"github.com/cidekar/adele-framework/cache"
 	"github.com/cidekar/adele-framework/cache/badgerdriver"
 	"github.com/cidekar/adele-framework/cache/redisdriver"
@@ -24,13 +27,14 @@ import (
 	"github.com/cidekar/adele-framework/mux"
 	"github.com/cidekar/adele-framework/render"
 	"github.com/cidekar/adele-framework/session"
+	"github.com/cidekar/adele-framework/vite"
 	crs "github.com/go-chi/cors"
 	"github.com/joho/godotenv"
 	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v2"
 )
 
-const Version = "v1.0.6"
+const Version = "v1.0.7"
 
 // Create a global helper instance for the package— provides access to all
 // helper methods in sub-packages.
@@ -70,6 +74,8 @@ func (a *Adele) New(rootPath string) error {
 	a.BootstrapMiddleware()
 
 	a.Debug, _ = strconv.ParseBool(os.Getenv("APP_DEBUG"))
+	a.EncryptionKey = os.Getenv("APP_KEY")
+	a.ErrorLog = log.New(os.Stderr, "ERRO ", log.Ldate|log.Ltime|log.Lshortfile)
 	a.RootPath = rootPath
 	a.Version = Version
 	a.ViewsTemplateDir = Helpers.Getenv("VIEWS_TEMPLATE_DIR", "resources/views")
@@ -77,6 +83,12 @@ func (a *Adele) New(rootPath string) error {
 		port:        Helpers.Getenv("HTTP_PORT", "4000"),
 		renderer:    Helpers.Getenv("RENDERER", "jet"),
 		sessionType: Helpers.Getenv("SESSION_TYPE"),
+	}
+
+	if appURL := os.Getenv("APP_URL"); appURL != "" {
+		a.Server.URL = appURL
+	} else {
+		a.Server.URL = "http://localhost:" + a.config.port
 	}
 
 	muxRouter, err := a.BootstrapMux(rootPath)
@@ -95,6 +107,13 @@ func (a *Adele) New(rootPath string) error {
 	a.Render = a.BootstrapRender()
 
 	a.BootstrapDatabase()
+
+	a.Auth = &auth.Auth{
+		AppName:  a.AppName,
+		DB:       a.DB,
+		ErrorLog: a.ErrorLog,
+		Session:  a.Session,
+	}
 
 	a.Helpers = a.BootstrapHelpers()
 
@@ -318,7 +337,22 @@ func (a *Adele) BootstrapJetEngine() *jet.Set {
 		views = jet.NewSet(loader)
 	}
 
+	v := vite.New(
+		os.Getenv("VITE_HOST"),
+		os.Getenv("VITE_PORT"),
+		os.Getenv("VITE_ROOT_DIR"),
+		os.Getenv("VITE_DIST_DIR"),
+		os.Getenv("VITE_MANIFEST"),
+		os.Getenv("VITE_DEVELOPMENT_MODE"),
+		log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lshortfile),
+		log.New(os.Stderr, "", log.Ldate|log.Ltime|log.Lshortfile),
+	)
+
 	views.AddGlobal("APP_DEBUG", a.Debug)
+	views.AddGlobal("VITE_DEVELOPMENT_MODE", v.DevelopmentMode)
+	views.AddGlobal("VITE_CLIENT", v.ClientPath)
+	views.AddGlobal("VITE_ASSET", v.GetViteAssetPath)
+	views.AddGlobal("VITE_MANIFEST", v.ParseViteBuildManifest)
 
 	return views
 }
@@ -454,4 +488,9 @@ func (a *Adele) CreateDirectories(rootPath string, directories []string) error {
 		}
 	}
 	return nil
+}
+
+// Create a new validator for the given form data using the framework's helpers.
+func (a *Adele) Validator(data url.Values) *helpers.Validation {
+	return a.Helpers.NewValidator(data)
 }

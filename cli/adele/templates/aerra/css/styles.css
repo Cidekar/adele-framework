@@ -1,0 +1,147 @@
+@import url("//fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.centered-vh {
+    @apply h-screen flex flex-col items-center justify-center;
+}
+
+a {
+    @apply text-pink-145;
+}
+
+a:hover,
+a:active
+a:focus {
+    @apply text-pink-150;
+}
+
+.current a {
+    @apply text-red-100;
+}
+.advatar {
+    @apply content-center h-[50px] w-[50px] bg-pink-1000 rounded-full;
+}
+
+.advatar .name {
+    @apply text-center text-[0] first-letter:text-[20px] text-pink-50 font-normal;
+}
+
+
+
+.alert {
+    @apply flex items-center justify-center font-medium border-none text-lg text-teal-50 bg-teal-500 min-h-[40px] px-6 py-2 text-center;
+}
+
+.alert--error {
+    @apply text-pink-50 bg-pink-550;
+}
+
+
+
+.card {
+    @apply bg-pink-200 p-12 min-h-[420px] w-[450px] rounded;
+}
+.card .button {
+    @apply bg-pink-1000 text-pink-50 uppercase font-medium tracking-widest px-10 py-2 rounded cursor-pointer hover:bg-pink-1250 active:bg-pink-1200 focus:bg-pink-1150 transition-all;
+}
+
+.card .header h1 {
+    @apply font-black tracking-widest text-xl uppercase text-pink-50 text-center before:content-['>'] before:p-2 after:content-['_'] after:h-[3px] after:w-[10px] after:bg-pink-50 after:inline-block after:ml-2 after:mr-2 after:animate-blink;
+}
+
+.card p {
+    @apply text-[14px] font-light text-pink-50;
+}
+
+.card input {
+    @apply focus:ring-2 focus:ring-pink-250;
+}
+
+.card label {
+    @apply block;
+}
+
+.card input[type=text],
+.card input[type=password] {
+    @apply rounded text-left font-medium border-none text-sm text-pink-1000 bg-pink-50 placeholder:font-normal placeholder:text-pink-1000 h-[40px];
+}
+
+.card .error input {
+    @apply border-solid border-2 border-pink-1000/100 bg-pink-50 placeholder:text-pink-1000;
+}
+
+.card .error .validator-message {
+    @apply text-pink-1000 font-bold;
+}
+
+.card .footer {
+    @apply flex whitespace-nowrap flex-col text-center;
+}
+
+.card .footer a {
+    @apply tracking-wide underline hover:font-medium hover:text-pink-1000 transition-all;
+}
+
+
+
+.console {
+    @apply before:content-['>'] text-pink-100 h-[200px] italic text-center md:text-[64px] text-[44px] font-bold leading-[60px];
+}
+
+.console .console-cursor {
+    @apply !inline-block not-italic top-[-4px] left-[10px];
+}
+
+.console a {
+    @apply text-pink-100 text-sm not-italic font-light mx-1 tracking-wide hover:font-medium hover:text-pink-1000 transition-all;
+}
+
+
+
+.well {
+    @apply bg-white m-8 p-8 min-h-[420px] rounded;
+}
+
+.well .header {
+    @apply mb-5
+}
+.well .header h1 {
+    @apply text-pink-1250;
+}
+
+.well .header h2 {
+    @apply text-pink-1200 text-sm;
+}
+
+.well label {
+    @apply text-pink-1250;
+}
+
+.well input[type=text],
+.well input[type=password],
+.well select {
+    @apply rounded text-left border-none text-sm text-pink-1250 bg-pink-50 placeholder:font-normal placeholder:text-pink-1000 h-[40px];
+}
+
+.well select:not(:valid) {
+    @apply font-normal text-pink-1000
+}
+
+.well .error select {
+    @apply border-solid border-2 border-pink-1000/100 bg-pink-50;
+}
+
+.well .button {
+    @apply bg-pink-1000 text-pink-50 uppercase font-medium tracking-widest px-10 py-2 rounded cursor-pointer hover:bg-pink-1250 active:bg-pink-1200 focus:bg-pink-1150 transition-all;
+}
+
+.well .error input {
+    @apply border-solid border-2 border-pink-1000/100 bg-pink-50 placeholder:text-pink-1000;
+}
+
+.well .error .validator-message {
+    @apply text-pink-1000 font-bold;
+}

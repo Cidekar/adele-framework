@@ -1,0 +1,17 @@
+{{extends "./layouts/base.jet"}}
+
+{{block browserTitle()}}Adele{{end}}
+
+{{block css()}}
+
+{{end}}
+
+{{block pageContent()}}
+
+	<App />
+
+{{end}}
+
+{{block js()}}
+
+{{end}}

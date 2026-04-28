@@ -17,6 +17,25 @@ export GOTOOLCHAIN ?= auto
 build\:adele:
 	@go build -o ./bin/adele ./cli/adele
 
+## installs a versioned dev build to /usr/local/bin/adele-beta so scaffolded
+## projects get a resolvable framework version in go.mod. The release pipeline
+## rewrites adele.go's `const Version = "v0.0.0"` at tag time, but dev builds
+## carry the placeholder and produce projects that fail `go mod tidy`. This
+## target stamps a real version (latest git tag, prefer non-rc) for the build,
+## then restores adele.go so the source contract the release pipeline depends
+## on is left untouched.
+.SILENT:
+install\:beta:
+	@VERSION=$$(git tag --sort=-v:refname | grep -v -- '-rc' | head -n 1); \
+	if [ -z "$$VERSION" ]; then VERSION=$$(git tag --sort=-v:refname | head -n 1); fi; \
+	if [ -z "$$VERSION" ]; then echo "no git tag found; aborting"; exit 1; fi; \
+	echo "stamping adele.go with $$VERSION..."; \
+	sed -i.bak "s/const Version = \"v0.0.0\"/const Version = \"$$VERSION\"/" adele.go; \
+	trap 'mv adele.go.bak adele.go 2>/dev/null' EXIT; \
+	go install ./cli/adele && \
+	sudo cp $$HOME/go/bin/adele /usr/local/bin/adele-beta && \
+	echo "✅ adele-beta installed → $$(which adele-beta) (Version=$$VERSION)"
+
 # Help command for build commands
 .SILENT:
 build\:help:

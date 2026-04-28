@@ -1,0 +1,17 @@
+<ul>
+    <!-- Define menu block -->
+    {{block link(target="text")}}
+        <li class="pb-1 pt-1 {{ if hasPrefix(path, target)}}current{{end}}">
+            {{yield content}}
+        </li>
+    {{end}}
+
+    <!-- Invoke menu block -->
+    {{yield link(target="/dashboard/home") content}}
+        <a href="{{target}}">Dashboard</a>
+    {{end}}
+
+    {{yield link(target="/dashboard/profile") content}}
+        <a href="{{target}}">Profile</a>
+    {{end}}
+</ul>

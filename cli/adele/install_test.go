@@ -77,6 +77,110 @@ func TestInstall_Handle_UnknownKit(t *testing.T) {
 	}
 }
 
+func TestInstall_ResolveVariant_DefaultIsVanilla(t *testing.T) {
+	originalOptions := Registry.GetOptions()
+	defer Registry.SetOptions(originalOptions)
+
+	Registry.SetOptions([]string{})
+
+	got, err := resolveStarterKitVariant()
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if got.name != vanillaVariant.name {
+		t.Errorf("Expected default variant %q, got %q", vanillaVariant.name, got.name)
+	}
+}
+
+func TestInstall_ResolveVariant_BareVueIsVue3(t *testing.T) {
+	originalOptions := Registry.GetOptions()
+	defer Registry.SetOptions(originalOptions)
+
+	Registry.SetOptions([]string{"--vue"})
+
+	got, err := resolveStarterKitVariant()
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if got.name != vue3Variant.name {
+		t.Errorf("Expected bare --vue to resolve to %q, got %q", vue3Variant.name, got.name)
+	}
+}
+
+func TestInstall_ResolveVariant_VueExplicit3(t *testing.T) {
+	originalOptions := Registry.GetOptions()
+	defer Registry.SetOptions(originalOptions)
+
+	Registry.SetOptions([]string{"--vue=3"})
+
+	got, err := resolveStarterKitVariant()
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if got.name != vue3Variant.name {
+		t.Errorf("Expected --vue=3 to resolve to %q, got %q", vue3Variant.name, got.name)
+	}
+}
+
+func TestInstall_ResolveVariant_Vue2(t *testing.T) {
+	originalOptions := Registry.GetOptions()
+	defer Registry.SetOptions(originalOptions)
+
+	Registry.SetOptions([]string{"--vue=2"})
+
+	got, err := resolveStarterKitVariant()
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if got.name != vue2Variant.name {
+		t.Errorf("Expected --vue=2 to resolve to %q, got %q", vue2Variant.name, got.name)
+	}
+}
+
+func TestInstall_ResolveVariant_InvalidValue(t *testing.T) {
+	originalOptions := Registry.GetOptions()
+	defer Registry.SetOptions(originalOptions)
+
+	Registry.SetOptions([]string{"--vue=4"})
+
+	_, err := resolveStarterKitVariant()
+	if err == nil {
+		t.Fatal("Expected error for --vue=4")
+	}
+	if !strings.Contains(err.Error(), "invalid") {
+		t.Errorf("Expected error to mention 'invalid', got: %v", err)
+	}
+}
+
+// TestInstall_ResolveVariant_RealArgvBareVue exercises the full argv → Registry
+// → resolveStarterKitVariant path that an end user actually hits when they run
+// `adele install starter-kit --vue`. Earlier the resolver called GetOption,
+// which leaks neighbor positional args (returning "starter-kit" as the value)
+// and routed bare --vue into the invalid-value branch. This test pins the fix.
+func TestInstall_ResolveVariant_RealArgvBareVue(t *testing.T) {
+	originalArgs := os.Args
+	originalOptions := Registry.GetOptions()
+	originalParsedArgs := Registry.GetArgs()
+	defer func() {
+		os.Args = originalArgs
+		Registry.SetOptions(originalOptions)
+		Registry.SetArgs(originalParsedArgs)
+	}()
+
+	os.Args = []string{"adele", "install", "starter-kit", "--vue"}
+	if err := Registry.ParseCmdArgs(); err != nil {
+		t.Fatalf("ParseCmdArgs failed: %v", err)
+	}
+
+	got, err := resolveStarterKitVariant()
+	if err != nil {
+		t.Fatalf("Bare --vue should resolve to vue3 without error, got: %v", err)
+	}
+	if got.name != vue3Variant.name {
+		t.Errorf("Expected bare --vue (real argv) to resolve to %q, got %q", vue3Variant.name, got.name)
+	}
+}
+
 func TestInstall_Handle_DispatchesToStarterKit(t *testing.T) {
 	// Save and restore Registry args
 	originalArgs := Registry.GetArgs()
@@ -86,6 +190,24 @@ func TestInstall_Handle_DispatchesToStarterKit(t *testing.T) {
 	oldStdin := os.Stdin
 	defer func() { os.Stdin = oldStdin }()
 
+	// Use temp dir so any side effects are isolated
+	t.Chdir(t.TempDir())
+
+	// Seed a fake adele go.mod so ensureAdeleApp() short-circuits and the
+	// dispatch reaches StarterKit.Handle() (where the actual prompt fires).
+	if err := os.WriteFile("go.mod", []byte("module example.com/app\n\nrequire github.com/cidekar/adele-framework v0.0.0\n"), 0644); err != nil {
+		t.Fatalf("Failed to seed go.mod: %v", err)
+	}
+
+	// Seed a managed file so the StarterKit confirmation prompt fires; without
+	// a pre-existing file the install would silently proceed (no prompt).
+	if err := os.MkdirAll("resources/views/layouts", 0755); err != nil {
+		t.Fatalf("Failed to create dirs: %v", err)
+	}
+	if err := os.WriteFile("resources/views/layouts/base.jet", []byte("STUB"), 0644); err != nil {
+		t.Fatalf("Failed to seed stub: %v", err)
+	}
+
 	// Pipe with "n" to cancel — verifies dispatch landed in StarterKit.Handle()
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -94,9 +216,6 @@ func TestInstall_Handle_DispatchesToStarterKit(t *testing.T) {
 	os.Stdin = r
 	_, _ = w.WriteString("n\n")
 	w.Close()
-
-	// Use temp dir so any side effects are isolated
-	t.Chdir(t.TempDir())
 
 	Registry.SetArgs([]string{"install", "starter-kit"})
 
@@ -108,5 +227,189 @@ func TestInstall_Handle_DispatchesToStarterKit(t *testing.T) {
 
 	if !strings.Contains(strings.ToLower(err.Error()), "cancelled") {
 		t.Errorf("Expected dispatched starter-kit handler to return cancellation error, got: %v", err)
+	}
+}
+
+func TestIsAdeleApp_TrueForFrameworkGoMod(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	mod := "module example.com/app\n\nrequire github.com/cidekar/adele-framework v0.0.0\n"
+	if err := os.WriteFile("go.mod", []byte(mod), 0644); err != nil {
+		t.Fatalf("Failed to seed go.mod: %v", err)
+	}
+
+	if !IsAdeleApp() {
+		t.Error("Expected IsAdeleApp() to return true for go.mod referencing the framework")
+	}
+}
+
+func TestIsAdeleApp_FalseForUnrelatedGoMod(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	mod := "module example.com/app\n\nrequire github.com/some/other v1.0.0\n"
+	if err := os.WriteFile("go.mod", []byte(mod), 0644); err != nil {
+		t.Fatalf("Failed to seed go.mod: %v", err)
+	}
+
+	if IsAdeleApp() {
+		t.Error("Expected IsAdeleApp() to return false for go.mod that does not reference the framework")
+	}
+}
+
+func TestIsAdeleApp_FalseWhenNoGoMod(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	if IsAdeleApp() {
+		t.Error("Expected IsAdeleApp() to return false when go.mod is absent")
+	}
+}
+
+func TestEnsureAdeleApp_PassesThroughWhenInAdeleApp(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	mod := "module example.com/app\n\nrequire github.com/cidekar/adele-framework v0.0.0\n"
+	if err := os.WriteFile("go.mod", []byte(mod), 0644); err != nil {
+		t.Fatalf("Failed to seed go.mod: %v", err)
+	}
+
+	justScaffolded, err := ensureAdeleApp()
+	if err != nil {
+		t.Errorf("Expected ensureAdeleApp() to return nil inside adele app, got: %v", err)
+	}
+	if justScaffolded {
+		t.Error("Expected justScaffolded=false when CWD is already an adele app")
+	}
+}
+
+func TestEnsureAdeleApp_ErrorsWhenNotInAdeleAppAndUserDeclines(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	withStdin(t, "n\n")
+
+	justScaffolded, err := ensureAdeleApp()
+	if err == nil {
+		t.Fatal("Expected ensureAdeleApp() to error when user declines scaffold")
+	}
+	if justScaffolded {
+		t.Error("Expected justScaffolded=false when user declines scaffold")
+	}
+	if !strings.Contains(err.Error(), "must be run from the root of an adele application") {
+		t.Errorf("Expected decline error to mention adele application root, got: %v", err)
+	}
+}
+
+func TestEnsureAdeleApp_ErrorsWhenUserConfirmsButProvidesEmptyName(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	withStdin(t, "yes\n\n")
+
+	justScaffolded, err := ensureAdeleApp()
+	if err == nil {
+		t.Fatal("Expected ensureAdeleApp() to error when user confirms but provides empty name")
+	}
+	if justScaffolded {
+		t.Error("Expected justScaffolded=false when name is empty")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "empty") {
+		t.Errorf("Expected error to mention empty name, got: %v", err)
+	}
+}
+
+// TestInstall_WithAuth_AcceptsVue3 verifies that combining --with-auth with
+// --vue=3 passes the variant-validation gate. We intercept the install at the
+// ensureAdeleApp() prompt (CWD is not an adele app, decline) which means the
+// gate accepted the combination — a rejection at the gate would surface a
+// "--with-auth is not supported with vue2" error instead.
+func TestInstall_WithAuth_AcceptsVue3(t *testing.T) {
+	originalArgs := Registry.GetArgs()
+	originalOptions := Registry.GetOptions()
+	defer func() {
+		Registry.SetArgs(originalArgs)
+		Registry.SetOptions(originalOptions)
+	}()
+
+	t.Chdir(t.TempDir())
+
+	withStdin(t, "n\n")
+
+	Registry.SetArgs([]string{"install", "starter-kit"})
+	Registry.SetOptions([]string{"--vue=3", "--with-auth"})
+
+	err := NewInstall().Handle()
+	if err == nil {
+		t.Fatal("Expected ensureAdeleApp decline error after gate passes")
+	}
+	if strings.Contains(err.Error(), "not supported") {
+		t.Errorf("Vue3 + --with-auth must pass the variant gate, got rejection: %v", err)
+	}
+	if !strings.Contains(err.Error(), "must be run from the root of an adele application") {
+		t.Errorf("Expected ensureAdeleApp decline error, got: %v", err)
+	}
+}
+
+// TestInstall_WithAuth_AcceptsVue3Alias mirrors the above using --vue3.
+func TestInstall_WithAuth_AcceptsVue3Alias(t *testing.T) {
+	originalArgs := Registry.GetArgs()
+	originalOptions := Registry.GetOptions()
+	defer func() {
+		Registry.SetArgs(originalArgs)
+		Registry.SetOptions(originalOptions)
+	}()
+
+	t.Chdir(t.TempDir())
+
+	withStdin(t, "n\n")
+
+	Registry.SetArgs([]string{"install", "starter-kit"})
+	Registry.SetOptions([]string{"--vue3", "--with-auth"})
+
+	err := NewInstall().Handle()
+	if err == nil {
+		t.Fatal("Expected ensureAdeleApp decline error after gate passes")
+	}
+	if strings.Contains(err.Error(), "not supported") {
+		t.Errorf("--vue3 + --with-auth must pass the variant gate, got rejection: %v", err)
+	}
+}
+
+// TestInstall_WithAuth_RejectsVue2 verifies that --vue=2 + --with-auth is
+// blocked at the variant-validation gate (Vue 2 is end-of-life so we won't
+// invest in maintaining an auth scaffold for it).
+func TestInstall_WithAuth_RejectsVue2(t *testing.T) {
+	originalArgs := Registry.GetArgs()
+	originalOptions := Registry.GetOptions()
+	defer func() {
+		Registry.SetArgs(originalArgs)
+		Registry.SetOptions(originalOptions)
+	}()
+
+	t.Chdir(t.TempDir())
+
+	Registry.SetArgs([]string{"install", "starter-kit"})
+	Registry.SetOptions([]string{"--vue=2", "--with-auth"})
+
+	err := NewInstall().Handle()
+	if err == nil {
+		t.Fatal("Expected error when --with-auth is combined with --vue=2")
+	}
+	if !strings.Contains(err.Error(), "vue2") {
+		t.Errorf("Expected error to mention 'vue2', got: %v", err)
+	}
+}
+
+// TestInstall_ResolveVariant_Vue3FlagAlias verifies that the bare --vue3 flag
+// is treated as an alias for --vue=3.
+func TestInstall_ResolveVariant_Vue3FlagAlias(t *testing.T) {
+	originalOptions := Registry.GetOptions()
+	defer Registry.SetOptions(originalOptions)
+
+	Registry.SetOptions([]string{"--vue3"})
+
+	got, err := resolveStarterKitVariant()
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if got.name != vue3Variant.name {
+		t.Errorf("Expected --vue3 to resolve to %q, got %q", vue3Variant.name, got.name)
 	}
 }

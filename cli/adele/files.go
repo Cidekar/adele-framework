@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/ioutil"
 	"os"
+	"strings"
 )
 
 //go:embed templates
@@ -45,4 +46,16 @@ func fileExists(fileToCheck string) bool {
 
 func deleteFile(fileToDelete string) error {
 	return os.Remove(fileToDelete)
+}
+
+// IsAdeleApp reports whether the current working directory looks like the root
+// of an adele application. We use the framework module path in ./go.mod as the
+// marker — it's written by `adele new` from templates/go.mod.txt and is
+// authoritative for "this is an adele project."
+func IsAdeleApp() bool {
+	data, err := os.ReadFile("go.mod")
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(data), "github.com/cidekar/adele-framework")
 }

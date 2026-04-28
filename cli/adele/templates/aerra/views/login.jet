@@ -1,0 +1,67 @@
+{{extends "./layouts/application.jet"}}
+
+{{block browserTitle()}}
+	Login
+{{end}}
+
+{{block pageContent()}}
+    <div class="bg-pink-50">
+        <div class="centered-vh">
+
+            <div class="card">
+                <div class="header">
+                    <h1>Login</h1>
+                </div>
+
+                <div class="body">
+                    <form
+                        method="post"
+                        action="/login"
+                        novalidate=""
+                        onkeydown="return event.key != 'Enter';">
+
+                        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+                        <div class="mx-10">
+                            <div class="my-4 {{ isset(validatorBag.Errors["email"]) ?  "error" : "" }}">
+                                <label for="email" class="block text-pink-50">Email</label>
+                                <div class="relative">
+                                    <input id="email" name="email" class="w-full" type="text" placeholder="aerra@adele.com"/>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class=" h-[16px] h-[19px] fill-pink-1000 absolute top-1/2 -translate-y-1/2 right-2">
+                                    <path d="M2.5 3A1.5 1.5 0 0 0 1 4.5v.793c.026.009.051.02.076.032L7.674 8.51c.206.1.446.1.652 0l6.598-3.185A.755.755 0 0 1 15 5.293V4.5A1.5 1.5 0 0 0 13.5 3h-11Z" />
+                                    <path d="M15 6.954 8.978 9.86a2.25 2.25 0 0 1-1.956 0L1 6.954V11.5A1.5 1.5 0 0 0 2.5 13h11a1.5 1.5 0 0 0 1.5-1.5V6.954Z" />
+                                    </svg>
+                                </div>
+                                {{if isset(validatorBag)}}
+                                    <span class="validator-message">{{ validatorBag.Errors["email"] }}</span>
+                                {{end}}
+                            </div>
+
+                            <div class="my-4 {{ isset(validatorBag.Errors["password"]) ?  "error" : "" }}">
+                                <label for="email" class="text-pink-50">Password</label>
+                                <div class="relative">
+                                    <input id="password" name="password" class="w-full" type="password" placeholder=""/>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class=" h-[20px] fill-pink-1000 absolute top-1/2 -translate-y-1/2 right-2">
+                                    <path fill-rule="evenodd" d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7A1.5 1.5 0 0 0 3 8.5v5A1.5 1.5 0 0 0 4.5 15h7a1.5 1.5 0 0 0 1.5-1.5v-5A1.5 1.5 0 0 0 11.5 7V4.5A3.5 3.5 0 0 0 8 1Zm2 6V4.5a2 2 0 1 0-4 0V7h4Z" clip-rule="evenodd" />
+                                    </svg>
+                                </div>
+                                {{if isset(validatorBag)}}
+                                    <span class="validator-message">{{ validatorBag.Errors["password"] }}</span>
+                                {{end}}
+                            </div>
+
+                            <div class="my-6 text-center">
+                                <input class="button" type="submit" value="login"/>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+               <div class="footer">
+                    <p>I want an account, <a href="/registration">sign up</a>.</p>
+                    <p><a class="underline ml-2" href="/forgot">Forgot password</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+{{end}}
