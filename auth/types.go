@@ -16,20 +16,20 @@ type Auth struct {
 }
 
 type User struct {
-	ID        int       `db:"id,omitempty"`
-	FirstName string    `db:"first_name"`
-	LastName  string    `db:"last_name"`
-	Email     string    `db:"email"`
-	Active    int       `db:"user_active"`
-	Password  string    `db:"password"`
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	ID        int       `db:"id,omitempty" json:"id"`
+	FirstName string    `db:"first_name"   json:"firstName"`
+	LastName  string    `db:"last_name"    json:"lastName"`
+	Email     string    `db:"email"        json:"email"`
+	Active    int       `db:"user_active"  json:"active"`
+	Password  string    `db:"password"     json:"-"`
+	CreatedAt time.Time `db:"created_at"   json:"createdAt"`
+	UpdatedAt time.Time `db:"updated_at"   json:"updatedAt"`
 }
 
 type RememberToken struct {
-	ID            int       `db:"id,omitempty"`
-	UserID        int       `db:"user_id"`
-	RememberToken string    `db:"remember_token"`
-	CreatedAt     time.Time `db:"created_at"`
-	UpdatedAt     time.Time `db:"updated_at"`
+	ID            int       `db:"id,omitempty"   json:"id"`
+	UserID        int       `db:"user_id"        json:"userId"`
+	RememberToken string    `db:"remember_token" json:"-"`
+	CreatedAt     time.Time `db:"created_at"     json:"createdAt"`
+	UpdatedAt     time.Time `db:"updated_at"     json:"updatedAt"`
 }
