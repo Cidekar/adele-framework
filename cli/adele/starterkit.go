@@ -58,6 +58,12 @@ func (c *StarterKit) resolveFiles() map[string]string {
 		maps.Copy(out, sharedAuthMigrations)
 		maps.Copy(out, sharedDashboardViews)
 		maps.Copy(out, sharedAuthOverrides)
+		if c.variant.name == "vue3" {
+			// Vue 3 SPA replaces the per-page Jet views and ships its own
+			// Vue Router + components on top of the JSON-pivoted handlers.
+			maps.Copy(out, sharedAuthVue3ViewOverride)
+			maps.Copy(out, sharedAuthVue3)
+		}
 	}
 	return out
 }
@@ -411,6 +417,11 @@ func (c *StarterKit) Help() error {
 		fmt.Println("     - $ make migrate:up")
 		fmt.Println("     - or directly: $ adele migrate up")
 		color.Yellow("\nWithout step 5, /registration and /login will 500 with \"relation \\\"users\\\" does not exist\".")
+		if c.variant.name == "vue3" {
+			color.Green("  6. The Vue 3 SPA lives in resources/js/. Components for login,")
+			color.Green("     registration, dashboard, etc. are under resources/js/components/.")
+			color.Green("     Vue Router is configured in resources/js/router.ts.")
+		}
 	}
 	fmt.Println()
 	return nil

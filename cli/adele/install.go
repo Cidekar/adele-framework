@@ -21,13 +21,15 @@ var InstallCommand = &Command{
 		"adele install starter-kit --vue=3 --no-tailwind",
 		"adele install starter-kit --vue=2",
 		"adele install starter-kit --with-auth",
+		"adele install starter-kit --vue3 --with-auth",
 	},
 	Options: map[string]string{
 		"--skip":        "keep your existing templates; you must wire up the toolchain manually",
 		"--no-tailwind": "skip Tailwind CSS scaffolding (default: included)",
 		"--vue":         "scaffold a Vue starter (default: Vue 3)",
 		"--vue=N":       "scaffold Vue version N (2 or 3)",
-		"--with-auth":   "scaffold a working password-auth flow (vanilla only; vue/vue2 coming soon)",
+		"--vue3":        "alias for --vue=3",
+		"--with-auth":   "scaffold a working password-auth flow (vanilla or vue3)",
 	},
 }
 
@@ -56,8 +58,8 @@ func (c *Install) Handle() error {
 		if err != nil {
 			return err
 		}
-		if withAuth && variant.name != "vanilla" {
-			return fmt.Errorf("--with-auth is currently supported only with vanilla; vue and vue2 support is coming soon")
+		if withAuth && variant.name == "vue2" {
+			return fmt.Errorf("--with-auth is not supported with vue2 (Vue 2 is end-of-life); use --vue or --vue=3")
 		}
 		justScaffolded, err := ensureAdeleApp()
 		if err != nil {
@@ -133,7 +135,11 @@ func ensureAdeleApp() (justScaffolded bool, err error) {
 func resolveStarterKitVariant() (stackVariant, error) {
 	for _, opt := range Registry.GetOptions() {
 		flag, value, hasValue := strings.Cut(opt, "=")
-		if strings.TrimLeft(flag, "-") != "vue" {
+		flagName := strings.TrimLeft(flag, "-")
+		if flagName == "vue3" {
+			return vue3Variant, nil
+		}
+		if flagName != "vue" {
 			continue
 		}
 		if !hasValue {

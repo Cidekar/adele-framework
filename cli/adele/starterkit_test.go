@@ -626,6 +626,12 @@ func TestManagedFiles_DeduplicatesAndSortsStable(t *testing.T) {
 	for dest := range sharedDashboardViews {
 		wantSet[dest] = struct{}{}
 	}
+	for dest := range sharedAuthVue3 {
+		wantSet[dest] = struct{}{}
+	}
+	for dest := range sharedAuthVue3ViewOverride {
+		wantSet[dest] = struct{}{}
+	}
 	want := make([]string, 0, len(wantSet))
 	for dest := range wantSet {
 		want = append(want, dest)
@@ -956,15 +962,25 @@ func TestManagedFiles_IncludesVue3Destinations(t *testing.T) {
 	// 5 shared auth views + 10 shared auth code (incl. Makefile) +
 	// 4 shared auth migrations + 4 shared dashboard views + 8 vanilla-unique
 	// base entries + resources/js/main.ts + resources/js/App.vue from the vue
-	// variants = 33.
-	if len(got) != 33 {
-		t.Errorf("Expected managedFiles() to return 33 paths, got %d: %v", len(got), got)
+	// variants = 33; plus 12 net-new paths from sharedAuthVue3 (router.ts,
+	// api.ts, banner.ts, AlertBanner.vue, and 8 page components — main.ts,
+	// App.vue, package.json already in the union) = 45. sharedAuthVue3ViewOverride
+	// keys are all already present via sharedAuthViews + sharedDashboardViews
+	// + the home jet base entry, so they add no new paths.
+	if len(got) != 45 {
+		t.Errorf("Expected managedFiles() to return 45 paths, got %d: %v", len(got), got)
 	}
 	if !slices.Contains(got, "resources/js/main.ts") {
 		t.Errorf("Expected managedFiles() to include 'resources/js/main.ts', got: %v", got)
 	}
 	if !slices.Contains(got, "resources/js/App.vue") {
 		t.Errorf("Expected managedFiles() to include 'resources/js/App.vue', got: %v", got)
+	}
+	if !slices.Contains(got, "resources/js/router.ts") {
+		t.Errorf("Expected managedFiles() to include 'resources/js/router.ts', got: %v", got)
+	}
+	if !slices.Contains(got, "resources/js/components/Login.vue") {
+		t.Errorf("Expected managedFiles() to include 'resources/js/components/Login.vue', got: %v", got)
 	}
 }
 
@@ -1352,6 +1368,141 @@ func TestStarterKit_Handle_VanillaWithAuth_HappyPath(t *testing.T) {
 		if info.Size() == 0 {
 			t.Errorf("Expected file %q to be non-empty", f)
 		}
+	}
+}
+
+// expectedVue3WithAuthFiles is the union of vue3 base files and the aerra
+// auth scaffold + the vue3 SPA frontend overrides. The SPA replaces the
+// per-page Jet views with a single shell, ships Vue Router + components,
+// and adds vue-router to package.json.
+var expectedVue3WithAuthFiles = []string{
+	"resources/views/layouts/base.jet",
+	"resources/views/home.jet",
+	"resources/views/layouts/application.jet",
+	"resources/views/login.jet",
+	"resources/views/registration.jet",
+	"resources/views/forgot.jet",
+	"resources/views/reset-password.jet",
+	"resources/views/dashboard/home.jet",
+	"resources/views/dashboard/profile.jet",
+	"resources/views/dashboard/header.jet",
+	"resources/views/dashboard/menu.jet",
+	"resources/css/styles.css",
+	"resources/js/main.ts",
+	"resources/js/App.vue",
+	"resources/js/router.ts",
+	"resources/js/api.ts",
+	"resources/js/banner.ts",
+	"resources/js/components/AppLayout.vue",
+	"resources/js/components/AlertBanner.vue",
+	"resources/js/components/Login.vue",
+	"resources/js/components/Registration.vue",
+	"resources/js/components/Forgot.vue",
+	"resources/js/components/ResetPassword.vue",
+	"resources/js/components/Home.vue",
+	"resources/js/components/DashboardHome.vue",
+	"resources/js/components/DashboardProfile.vue",
+	"package.json",
+	"vite.config.ts",
+	"tailwind.config.js",
+	"postcss.config.js",
+	"handlers/aerra.go",
+	"handlers/convenience.go",
+	"main.go",
+	"middleware/authenticated.go",
+	"middleware/remember.go",
+	"models/user.go",
+	"models/remember_token.go",
+	"models/models.go",
+	"routes-web.go",
+	"Makefile",
+	"migrations/0001_create_users_table.up.sql",
+	"migrations/0001_create_users_table.down.sql",
+	"migrations/0002_create_remember_tokens_table.up.sql",
+	"migrations/0002_create_remember_tokens_table.down.sql",
+}
+
+// TestStarterKit_Handle_Vue3WithAuth_HappyPath confirms that --with-auth on
+// vue3 writes the full SPA scaffold: starter-kit chrome, aerra auth backend,
+// SPA shell views, Vue Router, components, fetch wrapper, and a package.json
+// with vue-router pinned.
+func TestStarterKit_Handle_Vue3WithAuth_HappyPath(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	withStdin(t, "")
+
+	k := NewStarterKit(vue3Variant, false, true, false, true)
+	if err := k.Handle(); err != nil {
+		t.Fatalf("Handle returned unexpected error: %v", err)
+	}
+
+	for _, f := range expectedVue3WithAuthFiles {
+		if !fileExists(f) {
+			t.Errorf("Expected file %q to be written by --vue3 --with-auth install", f)
+			continue
+		}
+		info, err := os.Stat(f)
+		if err != nil {
+			t.Errorf("Failed to stat %q: %v", f, err)
+			continue
+		}
+		if info.Size() == 0 {
+			t.Errorf("Expected file %q to be non-empty", f)
+		}
+	}
+
+	main, err := os.ReadFile("resources/js/main.ts")
+	if err != nil {
+		t.Fatalf("Failed to read main.ts: %v", err)
+	}
+	mainStr := string(main)
+	if !strings.Contains(mainStr, "createApp") {
+		t.Errorf("Expected SPA main.ts to contain 'createApp', got: %s", mainStr)
+	}
+	if !strings.Contains(mainStr, "app.use(router)") {
+		t.Errorf("Expected SPA main.ts to wire the router, got: %s", mainStr)
+	}
+
+	router, err := os.ReadFile("resources/js/router.ts")
+	if err != nil {
+		t.Fatalf("Failed to read router.ts: %v", err)
+	}
+	routerStr := string(router)
+	for _, route := range []string{"'/login'", "'/registration'", "'/forgot'", "'/reset-password'", "'/dashboard/home'", "'/dashboard/profile'"} {
+		if !strings.Contains(routerStr, route) {
+			t.Errorf("Expected router.ts to register route %s, got: %s", route, routerStr)
+		}
+	}
+
+	loginJet, err := os.ReadFile("resources/views/login.jet")
+	if err != nil {
+		t.Fatalf("Failed to read login.jet: %v", err)
+	}
+	if !strings.Contains(string(loginJet), `<div id="app">`) {
+		t.Errorf("Expected login.jet to be replaced with SPA shell, got: %s", string(loginJet))
+	}
+
+	dashboardHomeJet, err := os.ReadFile("resources/views/dashboard/home.jet")
+	if err != nil {
+		t.Fatalf("Failed to read dashboard/home.jet: %v", err)
+	}
+	if !strings.Contains(string(dashboardHomeJet), `<div id="app">`) {
+		t.Errorf("Expected dashboard/home.jet to be replaced with SPA shell, got: %s", string(dashboardHomeJet))
+	}
+	if !strings.Contains(string(dashboardHomeJet), `../layouts/application.jet`) {
+		t.Errorf("Expected nested SPA shell to extend ../layouts/application.jet, got: %s", string(dashboardHomeJet))
+	}
+
+	pkg, err := os.ReadFile("package.json")
+	if err != nil {
+		t.Fatalf("Failed to read package.json: %v", err)
+	}
+	pkgStr := string(pkg)
+	if !strings.Contains(pkgStr, `"vue-router"`) {
+		t.Errorf("Expected package.json to include vue-router, got: %s", pkgStr)
+	}
+	if !strings.Contains(pkgStr, `"vue"`) {
+		t.Errorf("Expected package.json to include vue, got: %s", pkgStr)
 	}
 }
 

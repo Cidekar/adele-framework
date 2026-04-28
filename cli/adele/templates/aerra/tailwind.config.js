@@ -5,6 +5,7 @@ const defaultTheme = require("tailwindcss/defaultTheme")
 module.exports = {
   content: [
     "resources/views/**/*.jet",
+    "resources/js/**/*.{vue,ts,tsx,js,jsx}",
   ],
   theme: {
     extend: {

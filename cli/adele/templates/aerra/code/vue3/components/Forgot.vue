@@ -1,0 +1,54 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import { RouterLink } from 'vue-router'
+import { apiPost } from '../api'
+
+const email = ref('')
+const message = ref('')
+const submitting = ref(false)
+
+async function submit() {
+    submitting.value = true
+    message.value = ''
+    const res = await apiPost('/forgot', {
+        email: email.value,
+    })
+    submitting.value = false
+    if (res.message) message.value = res.message
+}
+</script>
+
+<template>
+    <div class="bg-pink-50">
+        <div class="centered-vh">
+            <div class="card">
+                <div class="header">
+                    <h1>Forgot Password</h1>
+                </div>
+                <div class="body">
+                    <form @submit.prevent="submit" novalidate @keydown.enter.prevent>
+                        <div class="mx-10">
+                            <div class="my-4">
+                                <label for="email" class="block text-pink-50">Email</label>
+                                <div class="relative">
+                                    <input id="email" v-model="email" name="email" class="w-full" type="text" placeholder="aerra@adele.com" />
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class=" h-[16px] h-[19px] fill-pink-1000 absolute top-1/2 -translate-y-1/2 right-2">
+                                        <path d="M2.5 3A1.5 1.5 0 0 0 1 4.5v.793c.026.009.051.02.076.032L7.674 8.51c.206.1.446.1.652 0l6.598-3.185A.755.755 0 0 1 15 5.293V4.5A1.5 1.5 0 0 0 13.5 3h-11Z" />
+                                        <path d="M15 6.954 8.978 9.86a2.25 2.25 0 0 1-1.956 0L1 6.954V11.5A1.5 1.5 0 0 0 2.5 13h11a1.5 1.5 0 0 0 1.5-1.5V6.954Z" />
+                                    </svg>
+                                </div>
+                            </div>
+
+                            <div class="my-6 text-center">
+                                <input class="button" type="submit" :value="submitting ? 'Submitting...' : 'Submit'" :disabled="submitting" />
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="footer">
+                    <p>I have an account, <RouterLink to="/login">let's login</RouterLink>.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>

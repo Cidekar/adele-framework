@@ -76,6 +76,49 @@ var sharedAuthOverrides = map[string]string{
 	"tailwind.config.js":       "templates/aerra/tailwind.config.js",
 }
 
+// sharedAuthVue3 ships the Vue 3 SPA frontend that consumes the JSON-pivoted
+// aerra handlers. Merged into resolveFiles() ONLY when --vue3 + --with-auth.
+// Includes Vue Router setup, page components, an auth-aware fetch wrapper, and
+// a single Jet shell view that mounts <App /> for every SPA route. The
+// destination keys for resources/js/main.ts, resources/js/App.vue, and
+// package.json collide with vue3Variant.base; since this map merges AFTER
+// variant.base in resolveFiles(), the SPA versions win and replace the basic
+// vue3 chrome — that's intentional.
+var sharedAuthVue3 = map[string]string{
+	"resources/js/main.ts":                         "templates/aerra/code/vue3/main.ts",
+	"resources/js/App.vue":                         "templates/aerra/code/vue3/App.vue",
+	"resources/js/router.ts":                       "templates/aerra/code/vue3/router.ts",
+	"resources/js/api.ts":                          "templates/aerra/code/vue3/api.ts",
+	"resources/js/banner.ts":                       "templates/aerra/code/vue3/banner.ts",
+	"resources/js/components/AppLayout.vue":        "templates/aerra/code/vue3/components/AppLayout.vue",
+	"resources/js/components/AlertBanner.vue":      "templates/aerra/code/vue3/components/AlertBanner.vue",
+	"resources/js/components/Login.vue":            "templates/aerra/code/vue3/components/Login.vue",
+	"resources/js/components/Registration.vue":     "templates/aerra/code/vue3/components/Registration.vue",
+	"resources/js/components/Forgot.vue":           "templates/aerra/code/vue3/components/Forgot.vue",
+	"resources/js/components/ResetPassword.vue":    "templates/aerra/code/vue3/components/ResetPassword.vue",
+	"resources/js/components/Home.vue":             "templates/aerra/code/vue3/components/Home.vue",
+	"resources/js/components/DashboardHome.vue":    "templates/aerra/code/vue3/components/DashboardHome.vue",
+	"resources/js/components/DashboardProfile.vue": "templates/aerra/code/vue3/components/DashboardProfile.vue",
+	"package.json":                                 "templates/aerra/code/vue3/package.json",
+}
+
+// sharedAuthVue3ViewOverride replaces the per-page server-rendered auth Jet
+// views (login.jet, registration.jet, etc.) with a single SPA shell. When the
+// SPA is in charge, the server only renders <div id="app"></div> + the bundled
+// JS; Vue Router takes over client-side. Two shell variants exist because Jet
+// `extends` paths are relative — top-level views use ./layouts/... while
+// nested dashboard views use ../layouts/...
+var sharedAuthVue3ViewOverride = map[string]string{
+	"resources/views/login.jet":               "templates/aerra/code/vue3/views/spa-shell.jet",
+	"resources/views/registration.jet":        "templates/aerra/code/vue3/views/spa-shell.jet",
+	"resources/views/forgot.jet":              "templates/aerra/code/vue3/views/spa-shell.jet",
+	"resources/views/reset-password.jet":      "templates/aerra/code/vue3/views/spa-shell.jet",
+	"resources/views/home.jet":                "templates/aerra/code/vue3/views/spa-shell.jet",
+	"resources/views/dashboard/home.jet":      "templates/aerra/code/vue3/views/spa-shell-nested.jet",
+	"resources/views/dashboard/profile.jet":   "templates/aerra/code/vue3/views/spa-shell-nested.jet",
+	"resources/views/layouts/application.jet": "templates/aerra/code/vue3/views/application.jet",
+}
+
 // mergeMaps returns a new map containing every key from each input. Later inputs
 // override earlier ones on key collision; here all callers pass disjoint keys.
 func mergeMaps(sources ...map[string]string) map[string]string {
@@ -194,6 +237,12 @@ func managedFiles() []string {
 		set[dest] = struct{}{}
 	}
 	for dest := range sharedDashboardViews {
+		set[dest] = struct{}{}
+	}
+	for dest := range sharedAuthVue3 {
+		set[dest] = struct{}{}
+	}
+	for dest := range sharedAuthVue3ViewOverride {
 		set[dest] = struct{}{}
 	}
 	out := slices.Collect(maps.Keys(set))

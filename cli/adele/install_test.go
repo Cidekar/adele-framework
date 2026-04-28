@@ -315,10 +315,12 @@ func TestEnsureAdeleApp_ErrorsWhenUserConfirmsButProvidesEmptyName(t *testing.T)
 	}
 }
 
-// TestInstall_WithAuth_RejectsVue3 verifies that combining --with-auth with
-// --vue=3 returns a hard error before any project-touching work runs. Vue
-// support for the auth scaffold is planned but not yet shipped.
-func TestInstall_WithAuth_RejectsVue3(t *testing.T) {
+// TestInstall_WithAuth_AcceptsVue3 verifies that combining --with-auth with
+// --vue=3 passes the variant-validation gate. We intercept the install at the
+// ensureAdeleApp() prompt (CWD is not an adele app, decline) which means the
+// gate accepted the combination — a rejection at the gate would surface a
+// "--with-auth is not supported with vue2" error instead.
+func TestInstall_WithAuth_AcceptsVue3(t *testing.T) {
 	originalArgs := Registry.GetArgs()
 	originalOptions := Registry.GetOptions()
 	defer func() {
@@ -328,19 +330,51 @@ func TestInstall_WithAuth_RejectsVue3(t *testing.T) {
 
 	t.Chdir(t.TempDir())
 
+	withStdin(t, "n\n")
+
 	Registry.SetArgs([]string{"install", "starter-kit"})
 	Registry.SetOptions([]string{"--vue=3", "--with-auth"})
 
 	err := NewInstall().Handle()
 	if err == nil {
-		t.Fatal("Expected error when --with-auth is combined with --vue=3")
+		t.Fatal("Expected ensureAdeleApp decline error after gate passes")
 	}
-	if !strings.Contains(err.Error(), "vanilla") {
-		t.Errorf("Expected error to mention 'vanilla', got: %v", err)
+	if strings.Contains(err.Error(), "not supported") {
+		t.Errorf("Vue3 + --with-auth must pass the variant gate, got rejection: %v", err)
+	}
+	if !strings.Contains(err.Error(), "must be run from the root of an adele application") {
+		t.Errorf("Expected ensureAdeleApp decline error, got: %v", err)
 	}
 }
 
-// TestInstall_WithAuth_RejectsVue2 mirrors the vue3 rejection for vue2.
+// TestInstall_WithAuth_AcceptsVue3Alias mirrors the above using --vue3.
+func TestInstall_WithAuth_AcceptsVue3Alias(t *testing.T) {
+	originalArgs := Registry.GetArgs()
+	originalOptions := Registry.GetOptions()
+	defer func() {
+		Registry.SetArgs(originalArgs)
+		Registry.SetOptions(originalOptions)
+	}()
+
+	t.Chdir(t.TempDir())
+
+	withStdin(t, "n\n")
+
+	Registry.SetArgs([]string{"install", "starter-kit"})
+	Registry.SetOptions([]string{"--vue3", "--with-auth"})
+
+	err := NewInstall().Handle()
+	if err == nil {
+		t.Fatal("Expected ensureAdeleApp decline error after gate passes")
+	}
+	if strings.Contains(err.Error(), "not supported") {
+		t.Errorf("--vue3 + --with-auth must pass the variant gate, got rejection: %v", err)
+	}
+}
+
+// TestInstall_WithAuth_RejectsVue2 verifies that --vue=2 + --with-auth is
+// blocked at the variant-validation gate (Vue 2 is end-of-life so we won't
+// invest in maintaining an auth scaffold for it).
 func TestInstall_WithAuth_RejectsVue2(t *testing.T) {
 	originalArgs := Registry.GetArgs()
 	originalOptions := Registry.GetOptions()
@@ -358,7 +392,24 @@ func TestInstall_WithAuth_RejectsVue2(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error when --with-auth is combined with --vue=2")
 	}
-	if !strings.Contains(err.Error(), "vanilla") {
-		t.Errorf("Expected error to mention 'vanilla', got: %v", err)
+	if !strings.Contains(err.Error(), "vue2") {
+		t.Errorf("Expected error to mention 'vue2', got: %v", err)
+	}
+}
+
+// TestInstall_ResolveVariant_Vue3FlagAlias verifies that the bare --vue3 flag
+// is treated as an alias for --vue=3.
+func TestInstall_ResolveVariant_Vue3FlagAlias(t *testing.T) {
+	originalOptions := Registry.GetOptions()
+	defer Registry.SetOptions(originalOptions)
+
+	Registry.SetOptions([]string{"--vue3"})
+
+	got, err := resolveStarterKitVariant()
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if got.name != vue3Variant.name {
+		t.Errorf("Expected --vue3 to resolve to %q, got %q", vue3Variant.name, got.name)
 	}
 }
