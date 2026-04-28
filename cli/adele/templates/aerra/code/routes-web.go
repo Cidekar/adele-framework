@@ -28,6 +28,8 @@ func (a *application) WebRoutes() http.Handler {
 
 		r.Get("/logout", a.Handlers.Logout)
 
+		r.Post("/logout", a.Handlers.Logout)
+
 		r.Get("/forgot", a.Handlers.Forgot)
 
 		r.Post("/forgot", a.Handlers.ForgotPost)

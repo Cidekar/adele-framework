@@ -25,10 +25,29 @@ import (
 */
 
 func (h *Handlers) Dashboard(w http.ResponseWriter, r *http.Request) {
+	if wantsJSON(r) {
+		user := h.App.Auth.User(r)
+		if user == nil {
+			h.respondJSON(w, http.StatusUnauthorized, map[string]any{
+				"ok":      false,
+				"message": "unauthorized",
+			})
+			return
+		}
+		h.respondJSON(w, http.StatusOK, map[string]any{
+			"ok":   true,
+			"user": user,
+		})
+		return
+	}
 	h.render(w, r, "/dashboard/home", nil, nil)
 }
 
 func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
+	if wantsJSON(r) {
+		h.respondJSON(w, http.StatusOK, map[string]any{"ok": true})
+		return
+	}
 	err := h.render(w, r, "login", nil, nil)
 	if err != nil {
 		h.App.ErrorLog.Println("error rendering:", err)
@@ -38,6 +57,13 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) LoginPost(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseForm()
 	if err != nil {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusBadRequest, map[string]any{
+				"ok":      false,
+				"message": "Unable to process your request at this time. Please try again later.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "Unable to process your request at this time. Please try again later.")
 		return
 	}
@@ -51,6 +77,13 @@ func (h *Handlers) LoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !validator.Valid() {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"ok":     false,
+				"errors": validator.Errors,
+			})
+			return
+		}
 		vars := make(jet.VarMap)
 		vars.Set("validatorBag", validator)
 		h.render(w, r, "login", vars, nil)
@@ -62,6 +95,14 @@ func (h *Handlers) LoginPost(w http.ResponseWriter, r *http.Request) {
 	ok, err := h.App.Auth.Login(w, r, email, password)
 
 	if err != nil && err != auth.InvalidPasswordOrUserError {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusInternalServerError, map[string]any{
+				"ok":      false,
+				"message": "Unable to process your request at this time. Please try again later.",
+			})
+			h.App.ErrorLog.Println(err)
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "Unable to process your request at this time. Please try again later.")
 		h.App.ErrorLog.Println(err)
 		h.render(w, r, "login", nil, nil)
@@ -69,11 +110,26 @@ func (h *Handlers) LoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !ok {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusUnauthorized, map[string]any{
+				"ok":      false,
+				"message": "Sorry, the username or password you entered is incorrect. Please try again.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "Sorry, the username or password you entered is incorrect. Please try again.")
 		h.render(w, r, "login", nil, nil)
 		return
 	}
 
+	if wantsJSON(r) {
+		h.respondJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"redirect": "/dashboard/home",
+			"message":  "Success! You are logged into the application.",
+		})
+		return
+	}
 	h.App.Session.Put(r.Context(), "flash", "Success! You are logged into the application.")
 	http.Redirect(w, r, "/dashboard/home", http.StatusSeeOther)
 }
@@ -81,13 +137,35 @@ func (h *Handlers) LoginPost(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 	_, err := h.App.Auth.Logout(w, r)
 	if err != nil {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusInternalServerError, map[string]any{
+				"ok":      false,
+				"message": "Unable to process your request at this time. Please try again later.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "Unable to process your request at this time. Please try again later.")
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
+
+	if wantsJSON(r) {
+		h.respondJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"redirect": "/login",
+			"message":  "You have been logged out.",
+		})
+		return
+	}
+	h.App.Session.Put(r.Context(), "flash", "You have been logged out.")
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
 func (h *Handlers) Forgot(w http.ResponseWriter, r *http.Request) {
+	if wantsJSON(r) {
+		h.respondJSON(w, http.StatusOK, map[string]any{"ok": true})
+		return
+	}
 	err := h.render(w, r, "forgot", nil, nil)
 	if err != nil {
 		h.App.ErrorLog.Println("error rendering:", err)
@@ -98,6 +176,13 @@ func (h *Handlers) ForgotPost(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseForm()
 	if err != nil {
 		h.App.ErrorLog.Println("error parsing for:", err)
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusBadRequest, map[string]any{
+				"ok":      false,
+				"message": "Unable to process your request at this time. Please try again later.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "Unable to process your request at this time. Please try again later.")
 		http.Redirect(w, r, "/forgot", http.StatusBadRequest)
 		return
@@ -109,12 +194,26 @@ func (h *Handlers) ForgotPost(w http.ResponseWriter, r *http.Request) {
 	u, err = u.GetByEmail(email)
 	if err != nil {
 		h.App.ErrorLog.Println("error fetching user from database:", err)
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusInternalServerError, map[string]any{
+				"ok":      false,
+				"message": "Unable to process your request at this time. Please try again later.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "Unable to process your request at this time. Please try again later.")
 		http.Redirect(w, r, "/forgot", http.StatusSeeOther)
 		return
 	}
 
 	if u == nil {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusOK, map[string]any{
+				"ok":      true,
+				"message": "If an account with that email exists, a reset link has been sent.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "flash", "A password reset link was sent to your email address.")
 		http.Redirect(w, r, "/forgot", http.StatusSeeOther)
 		return
@@ -146,11 +245,22 @@ func (h *Handlers) ForgotPost(w http.ResponseWriter, r *http.Request) {
 		h.App.ErrorLog.Println("error adding mail to queue:", res.Error)
 	}
 
+	if wantsJSON(r) {
+		h.respondJSON(w, http.StatusOK, map[string]any{
+			"ok":      true,
+			"message": "If an account with that email exists, a reset link has been sent.",
+		})
+		return
+	}
 	h.App.Session.Put(r.Context(), "flash", "A password reset link was sent to your email address.")
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
 func (h *Handlers) Registration(w http.ResponseWriter, r *http.Request) {
+	if wantsJSON(r) {
+		h.respondJSON(w, http.StatusOK, map[string]any{"ok": true})
+		return
+	}
 	err := h.render(w, r, "registration", nil, nil)
 	if err != nil {
 		h.App.ErrorLog.Println("error rendering:", err)
@@ -160,6 +270,13 @@ func (h *Handlers) Registration(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) RegistrationPost(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseForm()
 	if err != nil {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusBadRequest, map[string]any{
+				"ok":      false,
+				"message": "Please try again later.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "Please try again later.")
 		return
 	}
@@ -188,6 +305,13 @@ func (h *Handlers) RegistrationPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !validator.Valid() {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"ok":     false,
+				"errors": validator.Errors,
+			})
+			return
+		}
 		vars := make(jet.VarMap)
 		vars.Set("validatorBag", validator)
 		vars.Set("name", r.Form.Get("name"))
@@ -214,9 +338,24 @@ func (h *Handlers) RegistrationPost(w http.ResponseWriter, r *http.Request) {
 
 	_, err = h.Models.Users.Insert(newUser)
 	if err != nil {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusInternalServerError, map[string]any{
+				"ok":      false,
+				"message": http.StatusText(http.StatusInternalServerError),
+			})
+			return
+		}
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
 
+	if wantsJSON(r) {
+		h.respondJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"redirect": "/login",
+			"message":  "Registration complete - please check your email and login.",
+		})
+		return
+	}
 	h.App.Session.Put(r.Context(), "flash", "Registration complete - please check your email and login.")
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
@@ -236,6 +375,13 @@ func (h *Handlers) ResetPassword(w http.ResponseWriter, r *http.Request) {
 
 	valid := signer.VerifyToken(testURL)
 	if !valid {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusBadRequest, map[string]any{
+				"ok":      false,
+				"message": "Invalid or expired token",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "The password reset link is invalid. Please request a new one and try again.")
 		h.render(w, r, "/forgot", nil, nil)
 		return
@@ -243,8 +389,20 @@ func (h *Handlers) ResetPassword(w http.ResponseWriter, r *http.Request) {
 
 	expired := signer.Expired(testURL, 60)
 	if expired {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusBadRequest, map[string]any{
+				"ok":      false,
+				"message": "Invalid or expired token",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "The password reset link expired, please request a new one.")
 		h.render(w, r, "/forgot", nil, nil)
+		return
+	}
+
+	if wantsJSON(r) {
+		h.respondJSON(w, http.StatusOK, map[string]any{"ok": true})
 		return
 	}
 
@@ -259,6 +417,13 @@ func (h *Handlers) ResetPassword(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) ResetPasswordPost(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseForm()
 	if err != nil {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusBadRequest, map[string]any{
+				"ok":      false,
+				"message": "Please request a new password reset and try again.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "Please request a new password reset and try again.")
 		return
 	}
@@ -276,6 +441,13 @@ func (h *Handlers) ResetPasswordPost(w http.ResponseWriter, r *http.Request) {
 	validator.Password("password", r.Form.Get("password"))
 
 	if !validator.Valid() {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"ok":     false,
+				"errors": validator.Errors,
+			})
+			return
+		}
 		vars := make(jet.VarMap)
 		vars.Set("validatorBag", validator)
 
@@ -286,6 +458,13 @@ func (h *Handlers) ResetPasswordPost(w http.ResponseWriter, r *http.Request) {
 
 	email, err := h.decrypt(r.Form.Get("email"))
 	if err != nil {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusBadRequest, map[string]any{
+				"ok":      false,
+				"message": "The password reset link is invalid. Please request a new one.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "The password reset link is invalid. Please request a new one.")
 		http.Redirect(w, r, "/forgot", http.StatusBadRequest)
 		return
@@ -295,12 +474,26 @@ func (h *Handlers) ResetPasswordPost(w http.ResponseWriter, r *http.Request) {
 	user, err = user.GetByEmail(email)
 	if err != nil {
 		h.App.ErrorLog.Println("error fetching user from database:", err)
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusInternalServerError, map[string]any{
+				"ok":      false,
+				"message": "Unable to process your request at this time. Please try again later.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "Unable to process your request at this time. Please try again later.")
 		http.Redirect(w, r, "/forgot", http.StatusSeeOther)
 		return
 	}
 
 	if user == nil {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusInternalServerError, map[string]any{
+				"ok":      false,
+				"message": "Unable to process your request at this time. Please try again later.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "Unable to process your request at this time. Please try again later.")
 		http.Redirect(w, r, "/forgot", http.StatusSeeOther)
 		return
@@ -308,10 +501,25 @@ func (h *Handlers) ResetPasswordPost(w http.ResponseWriter, r *http.Request) {
 
 	err = user.ResetPassword(user.ID, r.Form.Get("password"))
 	if err != nil {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusInternalServerError, map[string]any{
+				"ok":      false,
+				"message": "The password reset has failed. Please request a new password reset and try again.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "The password reset has failed. Please request a new password reset and try again.")
 		return
 	}
 
+	if wantsJSON(r) {
+		h.respondJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"redirect": "/login",
+			"message":  "Password reset complete - please login.",
+		})
+		return
+	}
 	h.App.Session.Put(r.Context(), "flash", "Password reset complete - please login.")
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
@@ -333,6 +541,21 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) Profile(w http.ResponseWriter, r *http.Request) {
+	if wantsJSON(r) {
+		user := h.App.Auth.User(r)
+		if user == nil {
+			h.respondJSON(w, http.StatusUnauthorized, map[string]any{
+				"ok":      false,
+				"message": "unauthorized",
+			})
+			return
+		}
+		h.respondJSON(w, http.StatusOK, map[string]any{
+			"ok":   true,
+			"user": user,
+		})
+		return
+	}
 	h.render(w, r, "/dashboard/profile", nil, nil)
 }
 
@@ -346,6 +569,13 @@ func (h *Handlers) ProfilePost(w http.ResponseWriter, r *http.Request) {
 
 	err := r.ParseForm()
 	if err != nil {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusBadRequest, map[string]any{
+				"ok":      false,
+				"message": "Please try again later.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "Please try again later.")
 		h.render(w, r, r.URL.Path, vars, nil)
 	}
@@ -369,6 +599,13 @@ func (h *Handlers) ProfilePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !validator.Valid() {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"ok":     false,
+				"errors": validator.Errors,
+			})
+			return
+		}
 		vars.Set("validatorBag", validator)
 		h.render(w, r, r.URL.Path, vars, nil)
 	}
@@ -396,12 +633,28 @@ func (h *Handlers) ProfilePost(w http.ResponseWriter, r *http.Request) {
 	err = h.Models.Users.Update(theuser)
 
 	if err != nil {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusInternalServerError, map[string]any{
+				"ok":      false,
+				"message": "Unable to process your request at this time. Please try again later.",
+			})
+			h.App.ErrorLog.Println(err)
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "Unable to process your request at this time. Please try again later.")
 		h.App.ErrorLog.Println(err)
 		h.render(w, r, r.URL.Path, vars, nil)
 		return
 	}
 
+	if wantsJSON(r) {
+		h.respondJSON(w, http.StatusOK, map[string]any{
+			"ok":      true,
+			"user":    theuser,
+			"message": "Success! Your profile information was updated.",
+		})
+		return
+	}
 	h.App.Session.Put(r.Context(), "flash", "Success! Your profile information was updated.")
 	h.render(w, r, r.URL.Path, vars, nil)
 
@@ -414,6 +667,13 @@ func (h *Handlers) ProfilePasswordPost(w http.ResponseWriter, r *http.Request) {
 	ok, err := h.App.Auth.Login(w, r, user.Email, password)
 
 	if !ok || err != nil {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusUnauthorized, map[string]any{
+				"ok":      false,
+				"message": "Sorry, the password you entered is incorrect. If you do not know your password, please logout and use our password reset.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "Sorry, the password you entered is incorrect. If you do not know your password, please logout and use our password reset.")
 		h.render(w, r, "login", nil, nil)
 		return
@@ -421,6 +681,13 @@ func (h *Handlers) ProfilePasswordPost(w http.ResponseWriter, r *http.Request) {
 
 	err = r.ParseForm()
 	if err != nil {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusBadRequest, map[string]any{
+				"ok":      false,
+				"message": "We are having trouble processing your request. Please complete the form and try again.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "We are having trouble processing your request. Please complete the form and try again.")
 		return
 	}
@@ -437,6 +704,13 @@ func (h *Handlers) ProfilePasswordPost(w http.ResponseWriter, r *http.Request) {
 	validator.Password("password", r.Form.Get("password"))
 
 	if !validator.Valid() {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"ok":     false,
+				"errors": validator.Errors,
+			})
+			return
+		}
 		vars := make(jet.VarMap)
 		vars.Set("validatorBag", validator)
 
@@ -448,12 +722,26 @@ func (h *Handlers) ProfilePasswordPost(w http.ResponseWriter, r *http.Request) {
 	u, err = u.GetByEmail(user.Email)
 	if err != nil {
 		h.App.ErrorLog.Println("error fetching user from database:", err)
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusInternalServerError, map[string]any{
+				"ok":      false,
+				"message": "Unable to process your request at this time. Please try again later.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "Unable to process your request at this time. Please try again later.")
 		http.Redirect(w, r, "/profile", http.StatusSeeOther)
 		return
 	}
 
 	if u == nil {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusInternalServerError, map[string]any{
+				"ok":      false,
+				"message": "Unable to process your request at this time. Please try again later.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "Unable to process your request at this time. Please try again later.")
 		http.Redirect(w, r, "/profile", http.StatusSeeOther)
 		return
@@ -462,10 +750,25 @@ func (h *Handlers) ProfilePasswordPost(w http.ResponseWriter, r *http.Request) {
 	err = u.ResetPassword(user.ID, r.Form.Get("password"))
 
 	if err != nil {
+		if wantsJSON(r) {
+			h.respondJSON(w, http.StatusInternalServerError, map[string]any{
+				"ok":      false,
+				"message": "The password reset has failed. Please complete the form and try again.",
+			})
+			return
+		}
 		h.App.Session.Put(r.Context(), "error", "The password reset has failed. Please complete the form and try again.")
 		return
 	}
 
+	if wantsJSON(r) {
+		h.respondJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"redirect": "/login",
+			"message":  "Password reset complete - please login.",
+		})
+		return
+	}
 	h.App.Session.Put(r.Context(), "flash", "Password reset complete - please login.")
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 

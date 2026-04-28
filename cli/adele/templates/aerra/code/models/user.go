@@ -13,14 +13,14 @@ import (
 
 // User is the type for a User
 type User struct {
-	ID        int       `db:"id,omitempty"`
-	FirstName string    `db:"first_name"`
-	LastName  string    `db:"last_name"`
-	Email     string    `db:"email"`
-	Active    int       `db:"user_active"`
-	Password  string    `db:"password"`
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	ID        int       `db:"id,omitempty"  json:"id"`
+	FirstName string    `db:"first_name"    json:"firstName"`
+	LastName  string    `db:"last_name"     json:"lastName"`
+	Email     string    `db:"email"         json:"email"`
+	Active    int       `db:"user_active"   json:"active"`
+	Password  string    `db:"password"      json:"-"`
+	CreatedAt time.Time `db:"created_at"    json:"createdAt"`
+	UpdatedAt time.Time `db:"updated_at"    json:"updatedAt"`
 }
 
 // Map model to table name

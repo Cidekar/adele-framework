@@ -3,7 +3,9 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/cidekar/adele-framework/helpers"
 	"github.com/CloudyKit/jet/v6"
@@ -42,3 +44,28 @@ func (h *Handlers) decrypt(crypto string) (string, error) {
 	}
 	return decrypted, nil
 }
+
+// wantsJSON reports whether the caller requested a JSON response. We check
+// both Accept and Content-Type because a JSON request body (SPA fetch with a
+// JSON payload) generally expects a JSON response back, even if the client
+// forgot to set an explicit Accept header.
+func wantsJSON(r *http.Request) bool {
+	accept := r.Header.Get("Accept")
+	if strings.Contains(accept, "application/json") {
+		return true
+	}
+	ct := r.Header.Get("Content-Type")
+	return strings.Contains(ct, "application/json")
+}
+
+// respondJSON writes a JSON body with the given HTTP status code. The body
+// shape is a flat map; callers pass {"ok": true, ...} on success or
+// {"ok": false, "errors": {...}} / {"ok": false, "message": "..."} on failure.
+func (h *Handlers) respondJSON(w http.ResponseWriter, status int, body map[string]any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		h.App.ErrorLog.Println("respondJSON encode:", err)
+	}
+}
+
