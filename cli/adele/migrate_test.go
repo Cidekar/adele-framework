@@ -61,6 +61,25 @@ func TestMigrate_Handle_UnknownAction(t *testing.T) {
 	if !strings.Contains(err.Error(), "unknown migrate action") {
 		t.Errorf("Expected error to mention unknown action, got: %v", err)
 	}
+	if !strings.Contains(err.Error(), "refresh") {
+		t.Errorf("Expected error to list 'refresh' as a valid action, got: %v", err)
+	}
+}
+
+func TestMigrateCommand_AdvertisesRefresh(t *testing.T) {
+	if !strings.Contains(MigrateCommand.Usage, "refresh") {
+		t.Errorf("Expected MigrateCommand.Usage to mention refresh, got: %s", MigrateCommand.Usage)
+	}
+	hasExample := false
+	for _, ex := range MigrateCommand.Examples {
+		if strings.Contains(ex, "refresh") {
+			hasExample = true
+			break
+		}
+	}
+	if !hasExample {
+		t.Error("Expected MigrateCommand.Examples to include a refresh example")
+	}
 }
 
 func TestBuildMigrateDSN_PostgresWithDefaults(t *testing.T) {
@@ -76,7 +95,7 @@ func TestBuildMigrateDSN_PostgresWithDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
-	if !strings.HasPrefix(dsn, "postgres://user:pass@localhost:5432/db?sslmode=") {
+	if !strings.HasPrefix(dsn, "pgx5://user:pass@localhost:5432/db?sslmode=") {
 		t.Errorf("Expected default host/port and prefer sslmode, got: %s", dsn)
 	}
 	if !strings.Contains(dsn, "sslmode=prefer") {
@@ -97,7 +116,7 @@ func TestBuildMigrateDSN_PostgresExplicit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
-	expected := "postgres://u:p@h:1234/d?sslmode=disable"
+	expected := "pgx5://u:p@h:1234/d?sslmode=disable"
 	if dsn != expected {
 		t.Errorf("Expected %q, got %q", expected, dsn)
 	}

@@ -38,3 +38,6 @@ migrate\:down\:all:
 
 migrate\:force:
 	@adele migrate force
+
+migrate\:refresh:
+	@adele migrate refresh

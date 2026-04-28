@@ -13,13 +13,14 @@ import (
 var MigrateCommand = &Command{
 	Name:        "migrate",
 	Help:        "Run database migrations",
-	Description: "Apply, revert, or force the migration version using the migration files in ./migrations/",
-	Usage:       "adele migrate <up|down|force> [options]",
+	Description: "Apply, revert, force, or refresh the migration version using the migration files in ./migrations/",
+	Usage:       "adele migrate <up|down|force|refresh> [options]",
 	Examples: []string{
 		"adele migrate up",
 		"adele migrate down",
 		"adele migrate down --all",
 		"adele migrate force",
+		"adele migrate refresh",
 	},
 	Options: map[string]string{
 		"--all": "with `down`, revert ALL migrations (default reverts a single step)",
@@ -35,7 +36,7 @@ func NewMigrate() *Migrate {
 func (c *Migrate) Handle() error {
 	args := Registry.GetArgs()
 	if len(args) < 2 {
-		return fmt.Errorf("missing migrate action (up|down|force)\nusage: %s", MigrateCommand.Usage)
+		return fmt.Errorf("missing migrate action (up|down|force|refresh)\nusage: %s", MigrateCommand.Usage)
 	}
 
 	action := args[1]
@@ -74,8 +75,22 @@ func (c *Migrate) Handle() error {
 			return fmt.Errorf("migrate force: %w", err)
 		}
 		color.Green("Migration version forced to -1.")
+	case "refresh":
+		// Drop the entire schema (including schema_migrations) and re-apply
+		// migrations from scratch. This is intentionally destructive — refresh
+		// exists to recover from dirty state, broken migrations, and schema
+		// drift, so it skips the down-migration dance and just wipes.
+		color.Yellow("Refreshing database: dropping ALL tables...")
+		if err := m.MigrateDrop(dsn); err != nil {
+			return fmt.Errorf("migrate refresh (drop): %w", err)
+		}
+		color.Yellow("Re-applying migrations...")
+		if err := m.MigrateUp(dsn); err != nil {
+			return fmt.Errorf("migrate refresh (up): %w", err)
+		}
+		color.Green("Database refreshed.")
 	default:
-		return fmt.Errorf("unknown migrate action %q (expected up|down|force)", action)
+		return fmt.Errorf("unknown migrate action %q (expected up|down|force|refresh)", action)
 	}
 	return nil
 }
@@ -99,10 +114,13 @@ func buildMigrateDSN() (string, error) {
 
 	switch dbType {
 	case "postgres", "postgresql", "pgx":
+		// pgx5:// scheme routes through the migrate pgx5 driver, which matches
+		// the framework's runtime DB driver and accepts sslmode=prefer (lib/pq
+		// rejects it).
 		if sslmode == "" {
 			sslmode = "prefer"
 		}
-		return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", user, password, host, port, dbname, sslmode), nil
+		return fmt.Sprintf("pgx5://%s:%s@%s:%s/%s?sslmode=%s", user, password, host, port, dbname, sslmode), nil
 	case "mysql", "mariadb":
 		return fmt.Sprintf("mysql://%s:%s@tcp(%s:%s)/%s", user, password, host, port, dbname), nil
 	default:
