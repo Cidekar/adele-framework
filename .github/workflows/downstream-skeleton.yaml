@@ -1,0 +1,76 @@
+name: downstream contract — adele skeleton
+
+# Verifies that changes to adele-framework do not break the adele skeleton
+# (the host app cloned by `adele new`). Runs on every framework PR + push
+# to main.
+#
+# Place this file at: adele-framework/.github/workflows/downstream-skeleton.yaml
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  # GitHub repo slug `Cidekar/adele` is the skeleton (the host app `adele new`
+  # clones into a user's project). The skeleton's own go.mod uses module path
+  # `myapp` as a placeholder; only `github.com/cidekar/adele-framework` appears
+  # in the skeleton's require block and is the target of our replace below.
+  SKELETON_REPO: Cidekar/adele
+  SKELETON_REF: main
+  # Skeleton's published go.mod declares `go 1.24`, but `go mod tidy` against
+  # framework HEAD (`go 1.25.0`) bumps the local copy's directive to 1.25.
+  # Intentional — write stays in the CI working copy, not pushed upstream.
+  GO_VERSION: '1.25'
+
+jobs:
+  skeleton-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: checkout framework
+        uses: actions/checkout@v4
+        with:
+          path: adele-framework
+
+      - name: checkout skeleton
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SKELETON_REPO }}
+          ref: ${{ env.SKELETON_REF }}
+          path: adele-skeleton
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: setup go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: replace framework dep with local checkout
+        working-directory: adele-skeleton
+        run: |
+          go mod edit -replace github.com/cidekar/adele-framework=../adele-framework
+          go mod tidy
+          echo "--- effective go.mod ---"
+          cat go.mod
+
+      # vet first because vet is faster than build and surfaces type errors
+      # earlier in the log.
+      - name: vet skeleton against framework HEAD
+        working-directory: adele-skeleton
+        run: go vet ./...
+
+      # No synthetic smoketest is needed — the skeleton itself is a runnable
+      # host app. `go build ./...` validates the contract.
+      - name: build skeleton against framework HEAD
+        working-directory: adele-skeleton
+        run: go build ./...
+
+      - name: clean go cache
+        if: always()
+        run: |
+          go clean -cache || true
+          go clean -modcache || true
