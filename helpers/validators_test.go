@@ -429,3 +429,147 @@ func TestFormatFieldName(t *testing.T) {
 		}
 	}
 }
+
+func TestIsEmailRFC(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		valid bool
+	}{
+		{"plain ascii", "user@example.com", true},
+		{"plus addressing", "user+tag@example.com", true},
+		{"subdomain", "user@mail.example.com", true},
+		{"empty", "", false},
+		{"missing at", "userexample.com", false},
+		{"missing domain", "user@", false},
+		{"missing local", "@example.com", false},
+		{"trailing space", "user@example.com ", false},
+		{"display name form", "User <user@example.com>", false},
+		{"two ats", "user@@example.com", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := createValidation()
+			v.IsEmailRFC("email", tc.value)
+			got := v.Valid()
+			if got != tc.valid {
+				t.Errorf("IsEmailRFC(%q): got Valid=%v, want %v (errors=%v)", tc.value, got, tc.valid, v.Errors)
+			}
+		})
+	}
+}
+
+func TestIsEmailMX(t *testing.T) {
+	// IsEmailMX performs live DNS lookups, which makes the happy path
+	// network-dependent. We test only the parse-failure branches that don't
+	// require DNS — a network-tagged test could exercise the live MX lookup
+	// against a known-good domain.
+	cases := []struct {
+		name  string
+		value string
+		valid bool
+	}{
+		{"empty", "", false},
+		{"missing at", "userexample.com", false},
+		{"trailing at", "user@", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := createValidation()
+			v.IsEmailMX("email", tc.value)
+			got := v.Valid()
+			if got != tc.valid {
+				t.Errorf("IsEmailMX(%q): got Valid=%v, want %v (errors=%v)", tc.value, got, tc.valid, v.Errors)
+			}
+		})
+	}
+}
+
+// TestIsEmailScriptSafe is the golden set covering parity with PHP's
+// email:spoof rule (egulias/email-validator SpoofCheckValidation with ICU
+// Spoofchecker SINGLE_SCRIPT). Each case states the expected result; if a
+// future change moves a case, the golden set is the source of truth for
+// parity with the Laravel rule.
+func TestIsEmailScriptSafe(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		valid bool // true = passes (single script or whitelisted combo)
+	}{
+		// ASCII / Latin-only — always safe.
+		{"plain ascii", "user@example.com", true},
+		{"hyphenated", "first.last@example.co.uk", true},
+		{"plus tag", "user+tag@example.com", true},
+		{"all digits local", "12345@example.com", true},
+
+		// Mixed Latin + Cyrillic — classic homograph attack, must flag.
+		{"cyrillic a in paypal", "user@раypal.com", false}, // 'а' is U+0430 Cyrillic
+		{"cyrillic o mixed in google", "user@gооgle.com", false},
+		{"cyrillic in local", "uѕer@example.com", false}, // 'ѕ' Cyrillic in Latin local
+
+		// Mixed Latin + Greek — homograph variant, must flag.
+		{"greek omicron in microsoft", "user@micrοsoft.com", false}, // 'ο' U+03BF
+
+		// Pure Cyrillic (single script) — passes per ICU SINGLE_SCRIPT.
+		// Documents the known limitation: pure-script spoofs are not caught.
+		{"pure cyrillic", "пользователь@почта.рф", true},
+
+		// Legitimate CJK combos with Latin — whitelisted.
+		{"japanese with latin", "user@東京.jp", true},                   // Latin + Han
+		{"japanese katakana", "ユーザー@example.jp", true},                // Katakana single
+		{"japanese mixed scripts", "user@サポート東京.jp", true},            // Latin + Han + Katakana
+		{"korean with latin", "user@한국.kr", true},                     // Latin + Hangul
+		{"korean han hangul latin", "user@한국samsung.kr", true},        // Latin + Hangul
+		{"traditional chinese with latin", "user@台北example.tw", true}, // Latin + Han
+
+		// Punycode IDN — passes (we don't decode, matches Laravel behavior).
+		{"punycode domain", "user@xn--ggle-0nda.com", true},
+
+		// Edge cases.
+		{"empty", "", true},
+		{"only at", "@", true},
+		{"hebrew + latin domain", "משתמש@example.com", false},
+		{"arabic + latin domain", "مستخدم@example.com", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := createValidation()
+			v.IsEmailScriptSafe("email", tc.value)
+			got := v.Valid()
+			if got != tc.valid {
+				t.Errorf("IsEmailScriptSafe(%q): got Valid=%v, want %v (errors=%v)", tc.value, got, tc.valid, v.Errors)
+			}
+		})
+	}
+}
+
+// TestIsMixedScript_Whitelisting exercises the ICU SINGLE_SCRIPT whitelist
+// directly to confirm legitimate multi-script combinations are not flagged.
+func TestIsMixedScript_Whitelisting(t *testing.T) {
+	cases := []struct {
+		name string
+		s    string
+		want bool // true = is mixed (flagged)
+	}{
+		{"latin only", "hello", false},
+		{"han only", "中文", false},
+		{"latin + han", "hello中文", false},
+		{"latin + han + hiragana", "hello中文ひらがな", false},
+		{"latin + han + katakana", "helloカタカナ中文", false},
+		{"latin + han + hangul", "hello한국中文", false},
+		{"latin + han + bopomofo", "helloㄅㄆㄇ中文", false},
+		{"latin + cyrillic", "helloпривет", true},
+		{"latin + greek", "helloγειά", true},
+		{"latin + arabic", "helloمرحبا", true},
+		{"latin + hebrew", "helloשלום", true},
+		{"han + hangul (no latin)", "中文한국", false}, // both CJK, allowed
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isMixedScript(tc.s)
+			if got != tc.want {
+				t.Errorf("isMixedScript(%q) = %v, want %v", tc.s, got, tc.want)
+			}
+		})
+	}
+}

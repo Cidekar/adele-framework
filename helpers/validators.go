@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -462,4 +464,156 @@ func (v *Validation) PasswordUncompromised(field string, value string, threshold
 			break
 		}
 	}
+}
+
+// IsEmailRFC validates that a field contains a syntactically valid email
+// address per RFC 5322. Stricter than IsEmail (which uses govalidator's
+// permissive regex). Backed by the standard library's net/mail.ParseAddress.
+// Equivalent to Laravel's `email:rfc` validation rule.
+//
+// Example:
+//
+//	email := r.Form.Get("email")
+//	validator.IsEmailRFC("email", email)
+//
+// Rejects display-name forms like "User <user@example.com>" and any value
+// that does not parse to exactly the input string.
+func (v *Validation) IsEmailRFC(field, value string) {
+	addr, err := mail.ParseAddress(value)
+	if err != nil || addr.Address != value {
+		v.AddError(field, "Invalid email address")
+	}
+}
+
+// IsEmailMX validates that the email's domain has a published MX record.
+// Performs a live DNS lookup; callers should be aware of latency and
+// transient network errors. Equivalent to Laravel's `email:dns` rule.
+// If the address cannot be parsed, no MX lookup is attempted and an error
+// is recorded; chain with IsEmailRFC for clearer error messages.
+//
+// Example:
+//
+//	email := r.Form.Get("email")
+//	validator.IsEmailMX("email", email)
+//
+// Validates that the domain portion can receive mail
+func (v *Validation) IsEmailMX(field, value string) {
+	addr, err := mail.ParseAddress(value)
+	if err != nil {
+		v.AddError(field, "Invalid email address")
+		return
+	}
+	at := strings.LastIndex(addr.Address, "@")
+	if at < 0 || at == len(addr.Address)-1 {
+		v.AddError(field, "Invalid email address")
+		return
+	}
+	domain := addr.Address[at+1:]
+	mxs, err := net.LookupMX(domain)
+	if err != nil || len(mxs) == 0 {
+		v.AddError(field, "Email domain has no MX record")
+	}
+}
+
+// IsEmailScriptSafe flags emails whose characters mix Unicode scripts in a
+// way commonly used for homograph spoofing (Latin + Cyrillic, Latin + Greek,
+// etc.). Equivalent to Laravel's `email:spoof` validation rule, which under
+// the hood enables only ICU Spoofchecker's SINGLE_SCRIPT check.
+//
+// Pure-Go implementation; no cgo or ICU dependency. Honors ICU's whitelist
+// of legitimate multi-script combinations: Latin + {Han, Hiragana, Katakana}
+// (Japanese), Latin + Han + Hangul (Korean), Latin + Han + Bopomofo
+// (traditional Chinese). Common (digits, punctuation, '@', '.') and
+// Inherited script categories are ignored.
+//
+// Example:
+//
+//	email := r.Form.Get("email")
+//	validator.IsEmailScriptSafe("email", email)
+//
+// Limitations (matches Laravel's behavior, including known gaps):
+//   - Pure-Cyrillic or pure-Greek spoofs (single script) pass.
+//   - Punycode-encoded IDN domains (xn--...) are not decoded, so attacks
+//     via IDN slip through. For stricter checks, decode Punycode via
+//     golang.org/x/net/idna before validation.
+func (v *Validation) IsEmailScriptSafe(field, value string) {
+	if isMixedScript(value) {
+		v.AddError(field, "Email contains characters from mixed scripts")
+	}
+}
+
+// isMixedScript implements the SINGLE_SCRIPT subset of UTS #39 used by
+// Laravel's email:spoof rule. Returns true if the string mixes scripts in a
+// way not on ICU's whitelist of legitimate combinations.
+func isMixedScript(s string) bool {
+	const (
+		scrLatin    = "Latin"
+		scrHan      = "Han"
+		scrHiragana = "Hiragana"
+		scrKatakana = "Katakana"
+		scrHangul   = "Hangul"
+		scrBopomofo = "Bopomofo"
+	)
+	scripts := map[string]bool{}
+	for _, r := range s {
+		// Skip Common (digits, punctuation, '@', spaces) and Inherited
+		// (combining marks). These do not count as scripts for this check.
+		switch {
+		case unicode.Is(unicode.Latin, r):
+			scripts[scrLatin] = true
+		case unicode.Is(unicode.Cyrillic, r):
+			scripts["Cyrillic"] = true
+		case unicode.Is(unicode.Greek, r):
+			scripts["Greek"] = true
+		case unicode.Is(unicode.Han, r):
+			scripts[scrHan] = true
+		case unicode.Is(unicode.Hiragana, r):
+			scripts[scrHiragana] = true
+		case unicode.Is(unicode.Katakana, r):
+			scripts[scrKatakana] = true
+		case unicode.Is(unicode.Hangul, r):
+			scripts[scrHangul] = true
+		case unicode.Is(unicode.Bopomofo, r):
+			scripts[scrBopomofo] = true
+		case unicode.Is(unicode.Hebrew, r):
+			scripts["Hebrew"] = true
+		case unicode.Is(unicode.Arabic, r):
+			scripts["Arabic"] = true
+		case unicode.Is(unicode.Thai, r):
+			scripts["Thai"] = true
+		case unicode.Is(unicode.Devanagari, r):
+			scripts["Devanagari"] = true
+		}
+	}
+	if len(scripts) <= 1 {
+		return false
+	}
+	// ICU's SINGLE_SCRIPT whitelist — legitimate multi-script combinations
+	// for CJK languages where Latin co-occurrence is expected.
+	if matchesProfile(scripts, scrLatin, scrHan, scrHiragana, scrKatakana) {
+		return false
+	}
+	if matchesProfile(scripts, scrLatin, scrHan, scrHangul) {
+		return false
+	}
+	if matchesProfile(scripts, scrLatin, scrHan, scrBopomofo) {
+		return false
+	}
+	return true
+}
+
+// matchesProfile returns true if every script in `scripts` is one of the
+// allowed scripts in `allowed`. Used to whitelist ICU's legitimate CJK
+// combinations.
+func matchesProfile(scripts map[string]bool, allowed ...string) bool {
+	allow := map[string]bool{}
+	for _, a := range allowed {
+		allow[a] = true
+	}
+	for s := range scripts {
+		if !allow[s] {
+			return false
+		}
+	}
+	return true
 }
