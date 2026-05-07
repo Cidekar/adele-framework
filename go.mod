@@ -2,6 +2,8 @@ module github.com/cidekar/adele-framework
 
 go 1.25.0
 
+toolchain go1.25.9
+
 replace google.golang.org/genproto => google.golang.org/genproto/googleapis/api v0.0.0-20250818200422-3122310a409c
 
 require (
