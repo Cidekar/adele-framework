@@ -1,0 +1,13 @@
+# Nancy ignore file — documented exceptions for OSS Index findings.
+#
+# Format: one CVE per line. Lines starting with # are comments.
+# Each suppression must have a written justification above it so that
+# future maintainers can re-evaluate when upstream ships a fix.
+
+# CVE-2026-41889 — github.com/jackc/pgx/v5
+# SQL injection, CVSS 2.3 (Low). Indirect dependency pulled in by
+# upper/db. govulncheck reachability analysis confirms no framework
+# code calls the vulnerable symbol. No upstream fix published as of
+# 2026-05-06 (latest pgx/v5 is v5.9.2 — same version Nancy flags).
+# Re-evaluate when jackc/pgx publishes v5.9.3+ or later.
+CVE-2026-41889
