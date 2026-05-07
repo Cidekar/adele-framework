@@ -53,14 +53,20 @@ func TestOpenDatabaseConnectionPgx(t *testing.T) {
 	username := "testuser"
 	password := "testpass"
 
-	db, err := OpenDB("pgx", &DataSourceName{
+	dsn := &DataSourceName{
 		Host:         host,
 		Port:         port.Port(),
 		User:         username,
 		Password:     password,
 		DatabaseName: database,
 		SslMode:      "disable",
-	})
+	}
+
+	// Postgres' "ready to accept connections" log fires before the
+	// backend is guaranteed to answer auth-required clients on the
+	// mapped port — the gap manifests as a CI ping timeout. Retry
+	// briefly so the test stays robust without changing OpenDB.
+	db, err := openWithRetry(t, "pgx", dsn, 10, 500*time.Millisecond)
 
 	if err != nil {
 		t.Errorf("OpenDB() error = %v", err)
@@ -70,6 +76,20 @@ func TestOpenDatabaseConnectionPgx(t *testing.T) {
 		t.Errorf("db is nil when a pointer was expected")
 	}
 
+}
+
+func openWithRetry(t *testing.T, dbType string, dsn *DataSourceName, attempts int, backoff time.Duration) (*sql.DB, error) {
+	t.Helper()
+	var db *sql.DB
+	var err error
+	for range attempts {
+		db, err = OpenDB(dbType, dsn)
+		if err == nil {
+			return db, nil
+		}
+		time.Sleep(backoff)
+	}
+	return db, err
 }
 
 func TestOpenDatabaseConnectionSql(t *testing.T) {
