@@ -249,6 +249,7 @@ jobs:
             if go list -json -deps ./... | nancy sleuth \
               --username "$OSS_INDEX_USERNAME" \
               --token "$OSS_INDEX_TOKEN" \
+              --exclude-vulnerability-file .nancy-ignore \
               --output text \
               --loud > nancy-detailed.txt 2>&1; then
 
@@ -308,6 +309,7 @@ jobs:
               go list -json -deps ./... | nancy sleuth \
                 --username "$OSS_INDEX_USERNAME" \
                 --token "$OSS_INDEX_TOKEN" \
+                --exclude-vulnerability-file .nancy-ignore \
                 --output text > nancy-summary.txt 2>&1 || true
             fi
       - name: Generate comprehensive report

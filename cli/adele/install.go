@@ -11,7 +11,7 @@ import (
 var InstallCommand = &Command{
 	Name:        "install",
 	Help:        "Install a kit into the current project",
-	Description: "Install a packaged kit (such as a frontend pipeline) into the current working directory",
+	Description: "Install a packaged kit (such as a frontend pipeline) or generate a new application key into the current working directory",
 	Usage:       "adele install <kit> [options]",
 	Examples: []string{
 		"adele install starter-kit",
@@ -22,6 +22,8 @@ var InstallCommand = &Command{
 		"adele install starter-kit --vue=2",
 		"adele install starter-kit --with-auth",
 		"adele install starter-kit --vue3 --with-auth",
+		"adele install key",
+		"adele install key --force",
 	},
 	Options: map[string]string{
 		"--skip":        "keep your existing templates; you must wire up the toolchain manually",
@@ -30,6 +32,7 @@ var InstallCommand = &Command{
 		"--vue=N":       "scaffold Vue version N (2 or 3)",
 		"--vue3":        "alias for --vue=3",
 		"--with-auth":   "scaffold a working password-auth flow (vanilla or vue3)",
+		"--force":       "(key only) overwrite an existing KEY value without prompting",
 	},
 }
 
@@ -42,11 +45,13 @@ func NewInstall() *Install {
 func (c *Install) Handle() error {
 	args := Registry.GetArgs()
 	if len(args) < 2 {
-		return fmt.Errorf("missing kit name (available: starter-kit)\nusage: %s", InstallCommand.Usage)
+		return fmt.Errorf("missing kit name (available: starter-kit, key)\nusage: %s", InstallCommand.Usage)
 	}
 
 	kit := args[1]
 	switch kit {
+	case "key":
+		return NewInstallKey(HasOption("--force")).Handle()
 	case "starter-kit":
 		// Resolve flags BEFORE the adele-app gate so an invalid value (e.g.
 		// --vue=4) errors out without first prompting the user to scaffold a
@@ -70,7 +75,7 @@ func (c *Install) Handle() error {
 		// remove?" gate avoids friction on the empty target.
 		return NewStarterKit(variant, skip, withTailwind, justScaffolded, withAuth).Handle()
 	default:
-		return fmt.Errorf("unknown kit %q (available: starter-kit)", kit)
+		return fmt.Errorf("unknown kit %q (available: starter-kit, key)", kit)
 	}
 }
 
