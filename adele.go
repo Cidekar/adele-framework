@@ -34,7 +34,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const Version = "v1.0.9"
+const Version = "v1.0.10"
 
 // Create a global helper instance for the package— provides access to all
 // helper methods in sub-packages.
@@ -376,6 +376,7 @@ func (a *Adele) BootstrapMux(rootPath string) (http.Handler, error) {
 	}
 
 	mux := mux.NewRouter()
+	mux.Use(middleware.TrustedProxy())
 	mux.Use(middleware.RequestID())
 	mux.Use(middleware.RealIP())
 	mux.Use(a.middleware.RateLimiter())

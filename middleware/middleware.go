@@ -6,6 +6,21 @@ import (
 	chi "github.com/go-chi/chi/v5/middleware"
 )
 
+// trustedProxyHeaderNames is the set of request headers that are honored only
+// when the immediate TCP peer is in TRUSTED_PROXIES. TrustedProxy strips these
+// headers BEFORE RealIP runs when the peer is untrusted, which prevents a
+// malicious client from spoofing its source IP, scheme, or host via
+// X-Forwarded-For / X-Real-IP / True-Client-IP and defeating any per-IP
+// authorization or throttling that consults r.RemoteAddr downstream.
+var trustedProxyHeaderNames = []string{
+	"X-Forwarded-For",
+	"X-Real-IP",
+	"True-Client-IP",
+	"X-Forwarded-Proto",
+	"X-Forwarded-Host",
+	"X-Forwarded-Port",
+}
+
 // RealIP is a middleware that sets a http.Request's RemoteAddr to the results of parsing either the True-Client-IP,
 //
 //	X-Real-IP or the X-Forwarded-For headers (in that order).
