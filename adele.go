@@ -376,6 +376,7 @@ func (a *Adele) BootstrapMux(rootPath string) (http.Handler, error) {
 	}
 
 	mux := mux.NewRouter()
+	mux.Use(middleware.TrustedProxy())
 	mux.Use(middleware.RequestID())
 	mux.Use(middleware.RealIP())
 	mux.Use(a.middleware.RateLimiter())
