@@ -463,3 +463,123 @@ func (v *Validation) PasswordUncompromised(field string, value string, threshold
 		}
 	}
 }
+
+// IsEmailScriptSafe validates that value does not mix Unicode scripts in a
+// way that would indicate a homograph spoofing attempt. Implements ICU's
+// SINGLE_SCRIPT check from UTS #39, with the standard whitelist exceptions
+// for legitimate multi-script combinations:
+//   - Latin + Han + Hiragana + Katakana (Japanese)
+//   - Latin + Han + Hangul (Korean)
+//   - Latin + Han + Bopomofo (traditional Chinese)
+//
+// Common (digits, punctuation, @, .) and Inherited (combining marks) are
+// ignored. ASCII-only emails always pass. Pure-non-Latin emails pass too —
+// detection is mixing-only, not blocking non-Latin scripts.
+//
+// Implementation uses stdlib unicode package script tables. No cgo, no
+// external library. Algorithm parity with PHP's email:spoof rule, which
+// uses egulias/email-validator's SpoofCheckValidation with only ICU
+// SINGLE_SCRIPT enabled.
+//
+// Example:
+//
+//	email := r.Form.Get("email")
+//	validator.IsEmailScriptSafe("email", email)
+//
+// Returns true on pass, false on fail.
+func (v *Validation) IsEmailScriptSafe(field, value string) bool {
+	// Fast path: pure ASCII never has script mixing.
+	asciiOnly := true
+	for i := 0; i < len(value); i++ {
+		if value[i] > 127 {
+			asciiOnly = false
+			break
+		}
+	}
+	if asciiOnly {
+		return true
+	}
+
+	// Tracked scripts. Common + Inherited are excluded by definition.
+	const (
+		sLatin = iota
+		sCyrillic
+		sGreek
+		sHangul
+		sHan
+		sHiragana
+		sKatakana
+		sArabic
+		sHebrew
+		sThai
+		sDevanagari
+		sBopomofo
+	)
+
+	scripts := make(map[int]struct{})
+
+	for _, r := range value {
+		// Skip Common (digits, @, ., -, +) and Inherited (combining marks).
+		if unicode.Is(unicode.Common, r) || unicode.Is(unicode.Inherited, r) {
+			continue
+		}
+		switch {
+		case unicode.Is(unicode.Latin, r):
+			scripts[sLatin] = struct{}{}
+		case unicode.Is(unicode.Cyrillic, r):
+			scripts[sCyrillic] = struct{}{}
+		case unicode.Is(unicode.Greek, r):
+			scripts[sGreek] = struct{}{}
+		case unicode.Is(unicode.Hangul, r):
+			scripts[sHangul] = struct{}{}
+		case unicode.Is(unicode.Han, r):
+			scripts[sHan] = struct{}{}
+		case unicode.Is(unicode.Hiragana, r):
+			scripts[sHiragana] = struct{}{}
+		case unicode.Is(unicode.Katakana, r):
+			scripts[sKatakana] = struct{}{}
+		case unicode.Is(unicode.Arabic, r):
+			scripts[sArabic] = struct{}{}
+		case unicode.Is(unicode.Hebrew, r):
+			scripts[sHebrew] = struct{}{}
+		case unicode.Is(unicode.Thai, r):
+			scripts[sThai] = struct{}{}
+		case unicode.Is(unicode.Devanagari, r):
+			scripts[sDevanagari] = struct{}{}
+		case unicode.Is(unicode.Bopomofo, r):
+			scripts[sBopomofo] = struct{}{}
+		}
+	}
+
+	if len(scripts) <= 1 {
+		return true
+	}
+
+	// Whitelisted multi-script combinations per UTS #39.
+	if isSubsetOf(scripts, []int{sLatin, sHan, sHiragana, sKatakana}) {
+		return true
+	}
+	if isSubsetOf(scripts, []int{sLatin, sHan, sHangul}) {
+		return true
+	}
+	if isSubsetOf(scripts, []int{sLatin, sHan, sBopomofo}) {
+		return true
+	}
+
+	v.AddError(field, "Email contains mixed Unicode scripts that may indicate a spoofing attempt")
+	return false
+}
+
+// isSubsetOf reports whether every key of have is present in want.
+func isSubsetOf(have map[int]struct{}, want []int) bool {
+	allowed := make(map[int]struct{}, len(want))
+	for _, s := range want {
+		allowed[s] = struct{}{}
+	}
+	for k := range have {
+		if _, ok := allowed[k]; !ok {
+			return false
+		}
+	}
+	return true
+}

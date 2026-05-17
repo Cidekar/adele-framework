@@ -429,3 +429,76 @@ func TestFormatFieldName(t *testing.T) {
 		}
 	}
 }
+
+// ----------------------------------------------------------------------------
+// IsEmailScriptSafe — golden-set regression vs PHP egulias/email-validator
+// SpoofCheckValidation with only ICU SINGLE_SCRIPT enabled.
+// ----------------------------------------------------------------------------
+
+func TestIsEmailScriptSafe(t *testing.T) {
+	cases := []struct {
+		name  string
+		email string
+		want  bool // true = pass, false = fail (mixed scripts detected)
+	}{
+		// --- Pass cases --------------------------------------------------
+		{"ascii_basic", "foo@example.com", true},
+		{"ascii_subdomain", "alice123@subdomain.example.org", true},
+		{"ascii_plus_tag", "email+tag@example.co", true},
+		{"ascii_dotted_local", "name.surname@example.com", true},
+		{"ascii_apostrophe", "O'Brien@example.com", true},
+		{"pure_han_japanese", "山田@example.jp", true},
+		{"han_hiragana_japanese", "山田太郎@日本.jp", true},
+		{"hangul_korean", "김철수@한국.kr", true},
+		{"han_latin_domain_japanese_context", "田中@日本.com", true},
+		{"pure_cyrillic", "пример@пример.рф", true},
+
+		// --- Fail cases: Cyrillic homograph spoofing in local part -------
+		// 'а' (U+0430), 'о' (U+043E), 'і' (U+0456) are Cyrillic look-alikes.
+		{"cyrillic_a_in_paypal", "pаypal@example.com", false},
+		{"cyrillic_o_in_google", "gооgle@example.com", false},
+		{"cyrillic_i_in_microsoft", "mіcrosoft@example.com", false},
+		{"cyrillic_a_in_amazon", "аmazon@example.com", false},
+
+		// --- Fail cases: Cyrillic homograph spoofing in domain -----------
+		{"cyrillic_in_domain_google", "test@gооgle.com", false},
+		{"cyrillic_mixed_in_domain", "hello@pаypа1.com", false},
+		{"cyrillic_in_domain_only", "user@аmazon.com", false},
+
+		// --- Fail cases: other mixed-script combinations -----------------
+		{"greek_mixed_with_latin", "hεllo@example.com", false}, // Greek epsilon
+		{"hebrew_mixed_with_latin", "shאlom@example.com", false},
+		{"arabic_local_latin_domain", "مرحبا@example.com", false},
+		{"thai_mixed_with_latin", "hเllo@example.com", false},
+		{"devanagari_mixed_with_latin", "nनmste@example.com", false},
+
+		// --- Fail cases: non-whitelisted multi-script combos -------------
+		{"hangul_plus_han_no_latin_ok", "한中@example.com", true}, // Korean+Han is whitelisted-adjacent: Han+Hangul (no Latin) — still subset of {Latin, Han, Hangul}, passes.
+		{"hangul_plus_hiragana_fail", "한ひ@example.com", false}, // Korean + Japanese hiragana — no whitelist
+		{"cyrillic_plus_greek_fail", "аα@example.com", false},  // pure spoof: Cyrillic + Greek
+
+		// --- Edge cases --------------------------------------------------
+		{"empty_string", "", true}, // ASCII-only fast path; caller chains IsEmailRFC for emptiness check
+		{"digits_and_punct", "1234567890+.@example.com", true},
+		{"unicode_with_combining_marks_latin", "café@example.com", true}, // Inherited combining acute, still single Latin script
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := createValidation()
+			got := v.IsEmailScriptSafe("email", tc.email)
+			if got != tc.want {
+				t.Fatalf("IsEmailScriptSafe(%q) = %v, want %v (errors=%v)",
+					tc.email, got, tc.want, v.Errors)
+			}
+			if tc.want && len(v.Errors) != 0 {
+				t.Fatalf("expected no error on pass, got %v", v.Errors)
+			}
+			if !tc.want {
+				if _, ok := v.Errors["email"]; !ok {
+					t.Fatalf("expected error on fail, got none")
+				}
+			}
+		})
+	}
+}
