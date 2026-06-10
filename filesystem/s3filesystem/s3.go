@@ -1,3 +1,5 @@
+// Package s3filesystem implements the filesystem.FS interface backed by
+// Amazon S3 (and S3-compatible endpoints) using the AWS SDK for Go.
 package s3filesystem
 
 import (

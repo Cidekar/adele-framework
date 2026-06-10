@@ -1,3 +1,10 @@
+// Package adele is the core of the Adele web framework, bootstrapping and wiring
+// together an application's runtime services.
+//
+// It defines the central Adele type and its New initializer, which scaffolds the
+// project directory layout, loads environment configuration, and provisions the
+// logger, session manager, middleware, routing, caching, database, filesystem,
+// rendering, and mailer subsystems used to run an application.
 package adele
 
 import (
@@ -34,7 +41,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const Version = "v1.0.11"
+const Version = "v1.0.12"
 
 // Create a global helper instance for the package— provides access to all
 // helper methods in sub-packages.

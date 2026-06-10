@@ -1,3 +1,5 @@
+// Package session configures and initializes a scs session manager from
+// cookie settings such as lifetime, persistence, security, name, and domain.
 package session
 
 import (

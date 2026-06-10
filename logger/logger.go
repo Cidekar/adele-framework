@@ -1,3 +1,7 @@
+// Package logger configures application logging for Adele built on logrus.
+//
+// It creates loggers whose format and level are driven by environment variables and
+// provides structured HTTP request logging middleware for incoming requests.
 package logger
 
 import (

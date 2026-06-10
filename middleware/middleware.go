@@ -1,3 +1,6 @@
+// Package middleware provides HTTP middleware for Adele applications, including
+// real-IP resolution, request IDs, panic recovery, rate limiting, session
+// loading, maintenance mode, and trusted-proxy header handling.
 package middleware
 
 import (

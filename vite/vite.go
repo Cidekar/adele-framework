@@ -1,3 +1,7 @@
+// Package vite integrates Vite-built front-end assets into server-side templates.
+//
+// In development mode it serves assets from the Vite dev server; in production it
+// resolves hashed asset paths by reading and parsing the Vite build manifest.
 package vite
 
 import (

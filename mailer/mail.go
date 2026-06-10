@@ -1,3 +1,8 @@
+// Package mailer sends email for Adele applications over SMTP or third-party APIs.
+//
+// It renders HTML and plain-text messages from templates, supports attachments, and
+// can deliver mail asynchronously through a job channel or via providers such as
+// Mailgun, SparkPost, and SendGrid.
 package mailer
 
 import (

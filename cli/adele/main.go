@@ -1,3 +1,6 @@
+// Command adele is the command-line tool for scaffolding and managing Adele
+// framework projects, providing subcommands to create new projects, install
+// components, run database migrations, and report the framework version.
 package main
 
 import (

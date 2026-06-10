@@ -1,3 +1,9 @@
+// Package postgresdriver provides PostgreSQL-specific helpers for the database
+// layer.
+//
+// It builds PostgreSQL data source name strings (defaulting sslmode to
+// "prefer") and creates upper/db query sessions from an existing *sql.DB
+// connection pool.
 package postgresdriver
 
 import (

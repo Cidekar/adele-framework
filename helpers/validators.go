@@ -19,6 +19,9 @@ import (
 	"github.com/fatih/camelcase"
 )
 
+// Validation holds the data being validated along with any accumulated
+// validation errors. Data contains the source form values being checked,
+// and Errors maps a field name to its first reported error message.
 type Validation struct {
 	Data   url.Values
 	Errors map[string]string

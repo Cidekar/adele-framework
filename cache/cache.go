@@ -1,3 +1,10 @@
+// Package cache defines the cache backend interface and shared helpers for the
+// framework's caching layer.
+//
+// It declares the Cache interface implemented by concrete drivers such as
+// badgerdriver and redisdriver, the Entry type for cached values, JSON
+// encode/decode helpers for portable storage, and environment-based detection
+// of which backend is configured.
 package cache
 
 import (

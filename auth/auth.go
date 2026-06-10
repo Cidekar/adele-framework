@@ -1,3 +1,8 @@
+// Package auth provides session-based user authentication for Adele applications.
+//
+// It handles login and logout, "remember me" cookie tokens, retrieval of the
+// currently authenticated user, and bcrypt password hashing, persisting users and
+// remember tokens through the framework's database layer.
 package auth
 
 import (

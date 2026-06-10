@@ -1,3 +1,9 @@
+// Package mux wraps the chi router to expose all HTTP verbs while adding support
+// for per-route scope annotations.
+//
+// Routes may carry a "[scope:...]" annotation in their pattern, which mux strips
+// before registration and records in a route tree so scopes can be looked up
+// during a request and enforced by middleware.
 package mux
 
 import (

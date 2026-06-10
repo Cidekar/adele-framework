@@ -1,3 +1,5 @@
+// Package sftpfilesystem implements the filesystem.FS interface backed by a
+// remote SFTP server over SSH using the pkg/sftp client.
 package sftpfilesystem
 
 import (

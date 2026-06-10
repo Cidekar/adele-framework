@@ -1,3 +1,7 @@
+// Package mysqldriver provides MySQL-specific helpers for the database layer.
+//
+// It builds MySQL data source name strings and creates upper/db query sessions
+// from an existing *sql.DB connection pool.
 package mysqldriver
 
 import (
