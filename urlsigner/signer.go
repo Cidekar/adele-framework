@@ -1,3 +1,5 @@
+// Package urlsigner generates and verifies tamper-proof, timestamped signed
+// URLs using a shared secret, and reports whether a signed token has expired.
 package urlsigner
 
 import (

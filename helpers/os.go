@@ -125,6 +125,14 @@ func (h *Helpers) UploadFile(r *http.Request, field string, config FileUploadCon
 	return result, nil
 }
 
+// validateAndPrepareFile validates an uploaded file against the supplied config and
+// builds the metadata for the saved file. It enforces the maximum size, detects the
+// MIME type by reading the file content (resetting the read pointer afterward), and
+// rejects types not present in config.AllowedMimeTypes. On success it generates a safe
+// filename and returns a FileUploadResult populated with the original name, generated
+// name, detected MIME type, and size. It returns an error if the file exceeds the size
+// limit, the MIME type cannot be detected or is disallowed, the pointer cannot be reset,
+// or a safe filename cannot be generated.
 func (h *Helpers) validateAndPrepareFile(file multipart.File, header *multipart.FileHeader, config FileUploadConfig) (*FileUploadResult, error) {
 	// Check file size
 	if header.Size > config.MaxSize {
@@ -162,6 +170,12 @@ func (h *Helpers) validateAndPrepareFile(file multipart.File, header *multipart.
 	}, nil
 }
 
+// createTempFile copies the contents of src into a new file named filename inside
+// tempDir, creating tempDir (with 0755 permissions) if it does not exist. When tempDir
+// is empty it defaults to "./tmp". It returns the path to the temporary file and a
+// cleanup function that removes that file when called. If the directory or file cannot
+// be created the copy is aborted and an error is returned; if copying fails the partial
+// temp file is removed before the error is returned.
 func (h *Helpers) createTempFile(src multipart.File, filename, tempDir string) (string, func(), error) {
 	if tempDir == "" {
 		tempDir = "./tmp"
@@ -195,6 +209,12 @@ func (h *Helpers) createTempFile(src multipart.File, filename, tempDir string) (
 	return tempPath, cleanup, nil
 }
 
+// generateSafeFilename builds a collision-resistant, sanitized filename from originalName
+// and the given extension. It strips any directory components, replaces spaces with
+// underscores, removes ".." sequences to guard against path traversal, drops the original
+// extension to avoid double extensions, and truncates the base name to 50 characters. A
+// random 8-byte hex suffix (sourced from crypto/rand) is appended before the extension to
+// ensure uniqueness. It returns an error only if reading random bytes fails.
 func (h *Helpers) generateSafeFilename(originalName, extension string) (string, error) {
 	// Generate random part
 	randomBytes := make([]byte, 8)

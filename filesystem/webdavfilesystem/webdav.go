@@ -1,3 +1,5 @@
+// Package webdavfilesystem implements the filesystem.FS interface backed by a
+// remote WebDAV server using the gowebdav client.
 package webdavfilesystem
 
 import (

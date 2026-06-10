@@ -1,3 +1,9 @@
+// Package provider implements a service-provider registry for extending the
+// application with pluggable, configurable components.
+//
+// Providers are registered globally, sorted by priority, then configured,
+// registered, and booted in two passes when loaded into an application.
+// Providers may opt into configuration, custom priority, or optional booting.
 package provider
 
 import (

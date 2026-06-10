@@ -1,3 +1,9 @@
+// Package database provides database connection management and query session
+// creation across supported SQL backends.
+//
+// It opens and configures *sql.DB connection pools from a DataSourceName,
+// resolves the configured database type to a driver, and builds upper/db query
+// sessions via the mysqldriver and postgresdriver subpackages.
 package database
 
 import (

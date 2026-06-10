@@ -1,3 +1,8 @@
+// Package filesystem defines the common FS interface and Listing type shared by
+// Adele's remote storage backends (S3, MinIO, SFTP, and WebDAV).
+//
+// Each backend implements FS to put, get, list, and delete files using a uniform
+// API, decoupling application code from any specific storage provider.
 package filesystem
 
 import "time"

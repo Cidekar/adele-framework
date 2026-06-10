@@ -1,3 +1,8 @@
+// Package render renders HTML pages using the configured templating engine.
+//
+// It supports Go's html/template, Jet templates, and Inertia, injecting default
+// template data such as the CSRF token, authentication state, and flash/error
+// messages drawn from the session.
 package render
 
 import (

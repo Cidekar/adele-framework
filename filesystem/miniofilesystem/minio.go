@@ -1,3 +1,5 @@
+// Package miniofilesystem implements the filesystem.FS interface backed by
+// MinIO object storage using the minio-go client.
 package miniofilesystem
 
 import (

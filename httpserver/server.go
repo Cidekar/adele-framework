@@ -1,3 +1,7 @@
+// Package httpserver constructs and starts the HTTP server for an Adele application.
+//
+// It builds a net/http.Server configured from the application's environment,
+// routes, and logger, then listens for and serves incoming connections.
 package httpserver
 
 import (

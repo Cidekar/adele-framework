@@ -1,3 +1,8 @@
+// Package rpcserver provides a net/rpc server and client for controlling a
+// running Adele application out of band, such as toggling maintenance mode.
+//
+// The server listens on a configurable TCP address and can be disabled via the
+// RPC_SERVER_DISABLE environment variable.
 package rpcserver
 
 import (

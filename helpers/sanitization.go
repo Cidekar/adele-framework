@@ -8,17 +8,33 @@ import (
 
 var (
 	// XSS Prevention
-	scriptTagRegex  = regexp.MustCompile(`(?i)<script[^>]*>.*?</script>`)
-	onEventRegex    = regexp.MustCompile(`(?i)\s*on\w+\s*=\s*"[^"]*"|\s*on\w+\s*=\s*'[^']*'|\s*on\w+\s*=[^\s>]*`) // More comprehensive
-	javascriptRegex = regexp.MustCompile(`(?i)javascript:[^"'\s>]*`)                                              // Remove the whole javascript: URL
+
+	// scriptTagRegex matches HTML <script> ... </script> blocks (case-insensitive,
+	// including any attributes and inner content) so they can be stripped from input.
+	scriptTagRegex = regexp.MustCompile(`(?i)<script[^>]*>.*?</script>`)
+	// onEventRegex matches inline event handler attributes (e.g. onclick, onload),
+	// whether the value is double-quoted, single-quoted, or unquoted (case-insensitive).
+	onEventRegex = regexp.MustCompile(`(?i)\s*on\w+\s*=\s*"[^"]*"|\s*on\w+\s*=\s*'[^']*'|\s*on\w+\s*=[^\s>]*`) // More comprehensive
+	// javascriptRegex matches javascript: protocol URLs (case-insensitive) up to the
+	// next quote, whitespace, or closing angle bracket, removing the whole javascript: URL.
+	javascriptRegex = regexp.MustCompile(`(?i)javascript:[^"'\s>]*`) // Remove the whole javascript: URL
 
 	// Code Injection Prevention
+
+	// controlCharsRegex matches non-printable ASCII control characters, including null
+	// bytes and DEL, which can be used in code injection attacks.
 	controlCharsRegex = regexp.MustCompile(`[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]`)
 
 	// LDAP/NoSQL Injection patterns
+
+	// ldapCharsRegex matches the special characters used in LDAP/NoSQL injection
+	// payloads: parentheses, ampersand, pipe, and exclamation mark.
 	ldapCharsRegex = regexp.MustCompile(`[()&|!]`)
 
 	// Path Traversal
+
+	// pathTraversalRegex matches directory traversal sequences (".." followed by a
+	// forward or back slash) used in path traversal attacks.
 	pathTraversalRegex = regexp.MustCompile(`\.\.[\\/]`)
 )
 
