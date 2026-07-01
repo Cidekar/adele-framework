@@ -1,11 +1,14 @@
 package helpers
 
 import (
+	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func createValidation() *Validation {
@@ -489,6 +492,106 @@ func TestIsEmailScriptSafe(t *testing.T) {
 			got := v.IsEmailScriptSafe("email", tc.email)
 			if got != tc.want {
 				t.Fatalf("IsEmailScriptSafe(%q) = %v, want %v (errors=%v)",
+					tc.email, got, tc.want, v.Errors)
+			}
+			if tc.want && len(v.Errors) != 0 {
+				t.Fatalf("expected no error on pass, got %v", v.Errors)
+			}
+			if !tc.want {
+				if _, ok := v.Errors["email"]; !ok {
+					t.Fatalf("expected error on fail, got none")
+				}
+			}
+		})
+	}
+}
+
+// ----------------------------------------------------------------------------
+// IsEmailMX — matches PHP egulias/email-validator DNSCheckValidation (the
+// email:mx / email:dns rule).
+//
+// The malformed-input cases below never touch the network. The DNS cases are
+// gated behind a short-timeout context and skip themselves when there's no
+// resolver available, so the suite stays green offline and in CI sandboxes.
+// ----------------------------------------------------------------------------
+
+func TestIsEmailMX_MalformedInput(t *testing.T) {
+	// These fail on parsing alone and must never hit DNS, so a cancelled
+	// context is safe — if any of them tried to resolve, it would error out
+	// the same way, but the point is they short-circuit before the lookup.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	cases := []struct {
+		name  string
+		email string
+	}{
+		{"no_at_sign", "not-an-email"},
+		{"trailing_at", "user@"},
+		{"empty_string", ""},
+		{"domain_is_bare_dot", "user@."},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := createValidation()
+			if got := v.IsEmailMX(ctx, "email", tc.email); got {
+				t.Fatalf("IsEmailMX(%q) = true, want false", tc.email)
+			}
+			if _, ok := v.Errors["email"]; !ok {
+				t.Fatalf("expected error on fail, got none")
+			}
+		})
+	}
+}
+
+// hasResolver reports whether outbound DNS actually works in this environment.
+// Used to skip the live-lookup cases rather than fail them offline.
+func hasResolver(t *testing.T) bool {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var r net.Resolver
+	if _, err := r.LookupHost(ctx, "google.com"); err != nil {
+		return false
+	}
+	return true
+}
+
+func TestIsEmailMX_LiveLookup(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping live DNS lookups in -short mode")
+	}
+	if !hasResolver(t) {
+		t.Skip("no DNS resolver available; skipping live MX checks")
+	}
+
+	cases := []struct {
+		name  string
+		email string
+		want  bool // true = domain can receive mail
+	}{
+		// gmail.com has real MX records.
+		{"has_mx", "someone@gmail.com", true},
+		// github.io serves web content with A records but publishes no MX,
+		// so it's accepted via the RFC 5321 §5.1 address-record fallback.
+		{"a_record_fallback", "someone@github.io", true},
+		// example.com publishes an RFC 7505 null MX ("0 ."), explicitly opting
+		// out of mail, so it must be rejected even though it has A records.
+		{"null_mx_rejected", "someone@example.com", false},
+		// A domain that resolves nowhere at all.
+		{"nonexistent_domain", "someone@this-domain-does-not-exist-xyz-9f8a.invalid", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			v := createValidation()
+			got := v.IsEmailMX(ctx, "email", tc.email)
+			if got != tc.want {
+				t.Fatalf("IsEmailMX(%q) = %v, want %v (errors=%v)",
 					tc.email, got, tc.want, v.Errors)
 			}
 			if tc.want && len(v.Errors) != 0 {
