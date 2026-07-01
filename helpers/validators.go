@@ -2,11 +2,13 @@ package helpers
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -585,4 +587,59 @@ func isSubsetOf(have map[int]struct{}, want []int) bool {
 		}
 	}
 	return true
+}
+
+// IsEmailMX checks that the email's domain is actually able to receive mail.
+// It mirrors PHP egulias/email-validator's DNSCheckValidation, the check
+// behind the email:mx and email:dns rules. The name says "MX", but per
+// RFC 5321 §5 a domain can accept mail through an MX record or, failing that,
+// a plain A/AAAA address record — so we accept either. A domain publishing an
+// RFC 7505 null MX (a single "." target) has explicitly opted out of email
+// and is rejected.
+//
+// This is the only validator here that does live DNS work, so it takes a
+// context and leaves timeout, cancellation, and deadline to the caller. Any
+// resolver failure (SERVFAIL, timeout, and so on) counts as a fail, matching
+// egulias' fail-closed behavior.
+//
+// Like IsEmailScriptSafe, it returns true/false and records an error via
+// AddError on failure so callers collect errors the same way everywhere.
+//
+// Example:
+//
+//	email := r.Form.Get("email")
+//	validator.IsEmailMX(r.Context(), "email", email)
+func (v *Validation) IsEmailMX(ctx context.Context, field, value string) bool {
+	at := strings.LastIndex(value, "@")
+	if at < 0 || at == len(value)-1 {
+		v.AddError(field, "Invalid email address")
+		return false
+	}
+	domain := strings.TrimSuffix(value[at+1:], ".")
+	if domain == "" {
+		v.AddError(field, "Invalid email address")
+		return false
+	}
+
+	var r net.Resolver
+
+	// Prefer MX records, same as egulias.
+	if mx, err := r.LookupMX(ctx, domain); err == nil && len(mx) > 0 {
+		// A lone "." (or empty) host is an RFC 7505 null MX: the domain has
+		// said it accepts no mail, so treat it as invalid.
+		if len(mx) == 1 && (mx[0].Host == "" || mx[0].Host == ".") {
+			v.AddError(field, "Email domain does not accept mail")
+			return false
+		}
+		return true
+	}
+
+	// No MX? Fall back to A/AAAA. RFC 5321 §5.1 makes a domain with only an
+	// address record an implicit mail exchanger, and egulias honors that.
+	if hosts, err := r.LookupHost(ctx, domain); err == nil && len(hosts) > 0 {
+		return true
+	}
+
+	v.AddError(field, "Email domain has no mail exchanger")
+	return false
 }
