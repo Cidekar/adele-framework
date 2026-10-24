@@ -219,7 +219,9 @@ release\:guard-branch:
 		WARN="   ⚠  You are on '$$CUR', not the release branch '$(RELEASE_SOURCE_BRANCH)'."; \
 	 else \
 		BEHIND=$$(git rev-list --count HEAD..origin/$(RELEASE_SOURCE_BRANCH) 2>/dev/null || echo "?"); \
-		if [ "$$BEHIND" != "0" ]; then \
+		if [ "$$BEHIND" = "?" ]; then \
+			WARN="   ⚠  Could not determine how far '$(RELEASE_SOURCE_BRANCH)' is from origin/$(RELEASE_SOURCE_BRANCH) (fetch may have failed)."; \
+		elif [ "$$BEHIND" != "0" ]; then \
 			WARN="   ⚠  Your '$(RELEASE_SOURCE_BRANCH)' is behind origin by $$BEHIND commit(s). Run: git pull"; \
 		fi; \
 	 fi; \
@@ -320,14 +322,15 @@ release\:preamble:
 release\:capture:
 	@$(MAKE) release:guard-branch
 	@LAST=$$(git tag -l --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | head -n1); \
+	 if [ -n "$$LAST" ]; then RANGE="$$LAST..HEAD"; else RANGE="$$(git rev-list --max-parents=0 HEAD | tail -1)..HEAD"; fi; \
 	 LAST=$${LAST:-v0.0.0}; \
 	 ver=$${LAST#v}; \
 	 MAJOR=$${ver%%.*}; rest=$${ver#*.}; MINOR=$${rest%%.*}; PATCH=$${rest#*.}; \
 	 PATCH_V="v$$MAJOR.$$MINOR.$$((PATCH+1))"; \
 	 MINOR_V="v$$MAJOR.$$((MINOR+1)).0"; \
 	 MAJOR_V="v$$((MAJOR+1)).0.0"; \
-	 SUBJECTS=$$(git log --format='%s' "$$LAST"..HEAD 2>/dev/null); \
-	 BODIES=$$(git log --format='%b' "$$LAST"..HEAD 2>/dev/null); \
+	 SUBJECTS=$$(git log --format='%s' "$$RANGE" 2>/dev/null); \
+	 BODIES=$$(git log --format='%b' "$$RANGE" 2>/dev/null); \
 	 N_COMMITS=$$(echo "$$SUBJECTS" | grep -c . 2>/dev/null); \
 	 if echo "$$BODIES" | grep -qi 'BREAKING CHANGE' || echo "$$SUBJECTS" | grep -qE '^[a-z]+(\([^)]*\))?!:'; then \
 		SUGGEST=major; DEFAULT=5; REC_TAG="$$MAJOR_V-rc"; REASON="breaking change since $$LAST"; \
@@ -361,7 +364,7 @@ release\:capture:
 		*) echo "❗ Invalid selection: $$choice"; exit 1 ;; \
 	 esac; \
 	 echo ""; \
-	 RELEASE_BRANCH_OK=1 $(MAKE) release:verify PACKAGE_PUBLICATION_TAG_NEXT=$$NEXT_TAG 2>/dev/null || exit 1
+	 RELEASE_BRANCH_OK=1 $(MAKE) release:verify PACKAGE_PUBLICATION_TAG_NEXT="$$NEXT_TAG" || exit 1
 
 
 
