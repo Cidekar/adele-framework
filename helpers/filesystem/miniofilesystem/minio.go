@@ -9,7 +9,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/cidekar/adele-framework/filesystem"
+	"github.com/cidekar/adele-framework/helpers/filesystem"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )

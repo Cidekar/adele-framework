@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cidekar/adele-framework/filesystem"
+	"github.com/cidekar/adele-framework/helpers/filesystem"
 )
 
 func TestCreateDirIfNotExist(t *testing.T) {

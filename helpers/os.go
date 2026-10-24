@@ -12,7 +12,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/cidekar/adele-framework/filesystem"
+	"github.com/cidekar/adele-framework/helpers/filesystem"
 	"github.com/gabriel-vasile/mimetype"
 )
 
