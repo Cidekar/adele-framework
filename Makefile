@@ -1,6 +1,7 @@
 SHELL := /bin/bash
 
 export PACKAGE_BRANCH = main
+export RELEASE_SOURCE_BRANCH = dev
 export PACKAGE_PUBLICATION_TAG ?=
 export PACKAGE_PUBLICATION_TAG_NEXT ?=
 export OUT ?=
@@ -206,7 +207,35 @@ test\:help:
 
 ## Release workflow to tag and push to the current branch
 .SILENT:
+# Warn (and require confirmation) if a release is not being cut from an
+# up-to-date RELEASE_SOURCE_BRANCH. Skipped when the caller already cleared
+# the check (RELEASE_BRANCH_OK=1), so the prompt appears at most once.
+release\:guard-branch:
+	@if [ "$$RELEASE_BRANCH_OK" = "1" ]; then exit 0; fi; \
+	 CUR=$$(git branch --show-current); \
+	 git fetch origin $(RELEASE_SOURCE_BRANCH) --quiet 2>/dev/null || true; \
+	 WARN=""; \
+	 if [ "$$CUR" != "$(RELEASE_SOURCE_BRANCH)" ]; then \
+		WARN="   ⚠  You are on '$$CUR', not the release branch '$(RELEASE_SOURCE_BRANCH)'."; \
+	 else \
+		BEHIND=$$(git rev-list --count HEAD..origin/$(RELEASE_SOURCE_BRANCH) 2>/dev/null || echo "?"); \
+		if [ "$$BEHIND" = "?" ]; then \
+			WARN="   ⚠  Could not determine how far '$(RELEASE_SOURCE_BRANCH)' is from origin/$(RELEASE_SOURCE_BRANCH) (fetch may have failed)."; \
+		elif [ "$$BEHIND" != "0" ]; then \
+			WARN="   ⚠  Your '$(RELEASE_SOURCE_BRANCH)' is behind origin by $$BEHIND commit(s). Run: git pull"; \
+		fi; \
+	 fi; \
+	 if [ -n "$$WARN" ]; then \
+		echo "$$WARN"; \
+		echo "      Releases should be cut from an up-to-date $(RELEASE_SOURCE_BRANCH)."; \
+		read -p "Continue anyway? [y/N] " ans; ans=$${ans:-N}; \
+		if [ "$$ans" != "y" ] && [ "$$ans" != "Y" ]; then echo "Release cancelled"; exit 1; fi; \
+	 fi
+
+.SILENT:
 release\:verify:
+	@$(MAKE) release:guard-branch
+
 	@if [[ ! $(PACKAGE_PUBLICATION_TAG_NEXT) =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$$ ]]; then \
 		echo "❗ Error: Tag '$(PACKAGE_PUBLICATION_TAG_NEXT)' does not follow semantic versioning format"; \
 		echo "   Expected: vX.Y.Z[-prerelease][+buildmeta]"; \
@@ -251,23 +280,32 @@ release\:pull:
 	@echo "Checking repository status..."
 
 	# Fetch latest changes
-	if ! git fetch origin $(PACKAGE_BRANCH); then \
+	if ! git fetch origin $(RELEASE_SOURCE_BRANCH); then \
 		echo "Error: Failed to fetch from origin"; \
 		exit 1; \
 	fi
 
 	# Check if local branch is behind
 	LOCAL=$$(git rev-parse HEAD); \
-	REMOTE=$$(git rev-parse origin/$(PACKAGE_BRANCH)); \
+	REMOTE=$$(git rev-parse origin/$(RELEASE_SOURCE_BRANCH)); \
 	if [[ "$$LOCAL" != "$$REMOTE" ]]; then \
 		echo "Local branch is behind origin - pulling changes..."; \
-		git pull origin $(PACKAGE_BRANCH); \
+		git pull origin $(RELEASE_SOURCE_BRANCH); \
 	else \
 		echo "✓ Repository is up to date"; \
 	fi
 
 release\:preamble:
-	@echo "Please enter a SemVer-compatible version tag for this release."
+	@echo "═══════════════════════════════════════════════════════════════════"
+	@echo "                          ADELE RELEASE"
+	@echo "═══════════════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "Adele requires a SemVer-compatible version tag for every release."
+	@echo "The tag drives the automated RC workflow and the published version,"
+	@echo "so it must match the format below exactly."
+	@echo ""
+	@echo "This step suggests the next tag from your commit history, but you"
+	@echo "can choose any bump or enter a tag by hand."
 	@echo ""
 	@echo "🏷️  SEMANTIC VERSIONING FORMAT:"
 	@echo "  Tags must follow: vMAJOR.MINOR.PATCH[-prerelease][+buildmeta]"
@@ -282,11 +320,51 @@ release\:preamble:
 	@echo ""
 
 release\:capture:
-	echo "";
-	@NEXT_TAG=$$(read -p "Enter new tag: " tag; echo $$tag); \
-	 export NEXT_TAG; \
+	@$(MAKE) release:guard-branch
+	@LAST=$$(git tag -l --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | head -n1); \
+	 if [ -n "$$LAST" ]; then RANGE="$$LAST..HEAD"; else RANGE="$$(git rev-list --max-parents=0 HEAD | tail -1)..HEAD"; fi; \
+	 LAST=$${LAST:-v0.0.0}; \
+	 ver=$${LAST#v}; \
+	 MAJOR=$${ver%%.*}; rest=$${ver#*.}; MINOR=$${rest%%.*}; PATCH=$${rest#*.}; \
+	 PATCH_V="v$$MAJOR.$$MINOR.$$((PATCH+1))"; \
+	 MINOR_V="v$$MAJOR.$$((MINOR+1)).0"; \
+	 MAJOR_V="v$$((MAJOR+1)).0.0"; \
+	 SUBJECTS=$$(git log --format='%s' "$$RANGE" 2>/dev/null); \
+	 BODIES=$$(git log --format='%b' "$$RANGE" 2>/dev/null); \
+	 N_COMMITS=$$(echo "$$SUBJECTS" | grep -c . 2>/dev/null); \
+	 if echo "$$BODIES" | grep -qi 'BREAKING CHANGE' || echo "$$SUBJECTS" | grep -qE '^[a-z]+(\([^)]*\))?!:'; then \
+		SUGGEST=major; DEFAULT=5; REC_TAG="$$MAJOR_V-rc"; REASON="breaking change since $$LAST"; \
+	 elif echo "$$SUBJECTS" | grep -qE '^feat(\([^)]*\))?:'; then \
+		SUGGEST=minor; DEFAULT=3; REC_TAG="$$MINOR_V-rc"; REASON="new feature since $$LAST"; \
+	 else \
+		SUGGEST=patch; DEFAULT=1; REC_TAG="$$PATCH_V-rc"; REASON="fixes/other since $$LAST"; \
+	 fi; \
+	 if [ "$$N_COMMITS" -eq 0 ]; then REASON="no new commits since $$LAST"; fi; \
 	 echo ""; \
-	 make release:verify PACKAGE_PUBLICATION_TAG_NEXT=$$NEXT_TAG 2>/dev/null || exit 1
+	 echo "Last release: $$LAST   ($$N_COMMITS commit(s) since)"; \
+	 echo "Recommended:  $$REC_TAG  ($$SUGGEST - $$REASON)"; \
+	 echo ""; \
+	 printf "  1) %-12s patch RC - triggers workflow\n" "$$PATCH_V-rc"; \
+	 printf "  2) %-12s patch release - manual\n" "$$PATCH_V"; \
+	 printf "  3) %-12s minor RC - triggers workflow\n" "$$MINOR_V-rc"; \
+	 printf "  4) %-12s minor release - manual\n" "$$MINOR_V"; \
+	 printf "  5) %-12s major RC - triggers workflow\n" "$$MAJOR_V-rc"; \
+	 printf "  6) %-12s major release - manual\n" "$$MAJOR_V"; \
+	 echo "  7) enter tag manually"; \
+	 echo ""; \
+	 read -p "Select [$$DEFAULT] (Enter = $$REC_TAG): " choice; choice=$${choice:-$$DEFAULT}; \
+	 case "$$choice" in \
+		1) NEXT_TAG="$$PATCH_V-rc" ;; \
+		2) NEXT_TAG="$$PATCH_V" ;; \
+		3) NEXT_TAG="$$MINOR_V-rc" ;; \
+		4) NEXT_TAG="$$MINOR_V" ;; \
+		5) NEXT_TAG="$$MAJOR_V-rc" ;; \
+		6) NEXT_TAG="$$MAJOR_V" ;; \
+		7) read -p "Enter new tag: " NEXT_TAG ;; \
+		*) echo "❗ Invalid selection: $$choice"; exit 1 ;; \
+	 esac; \
+	 echo ""; \
+	 RELEASE_BRANCH_OK=1 $(MAKE) release:verify PACKAGE_PUBLICATION_TAG_NEXT="$$NEXT_TAG" || exit 1
 
 
 
@@ -294,12 +372,12 @@ release\:capture:
 release\:get-current-tag:
 	@echo "📡 Fetching latest tags from origin..."
 	@if git fetch --tags origin --quiet; then \
-		echo "✅ Tags updated successfully"; \
+		echo "   Tags updated successfully"; \
 	else \
 		echo "⚠️  Warning: Could not fetch tags from origin"; \
 	fi
-	$(eval LATEST_TAG=$(shell git describe --tags --abbrev=0 2>/dev/null || echo "No current tags found"))
-	@echo "🏷️  LAST KNOWN TAG: $(LATEST_TAG)"
+	@echo "   LAST KNOWN TAG:   $$(git tag -l --sort=-v:refname | head -n1 || echo 'No current tags found')"
+	@echo "   LAST RELEASE TAG: $$(git tag -l --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | head -n1 || echo 'No release tags found')"
 
 # Combined release target for convenience
 #@make release:pull release:verify
@@ -349,23 +427,23 @@ release\:help:
 	@echo "    v1.0.0rc     - Missing hyphen (use v1.0.0-rc)"
 	@echo ""
 	@echo "🌿 BRANCH PROTECTION & TAGGING:"
-	@echo "  📦 Protected branch: $(PACKAGE_BRANCH) (PR-only merges)"
-	@echo "  🏷️  Tags can be created from: ANY branch/commit"
+	@echo "  📦 Protected branch: $(PACKAGE_BRANCH) (PR-only merges, RC workflow target)"
+	@echo "  🏷️  Release source:   $(RELEASE_SOURCE_BRANCH) (cut RC tags from here)"
 	@echo "  🚀 RC workflow target: Merges PRs into $(PACKAGE_BRANCH)"
 	@echo ""
-	@echo "  Note: While you can tag from any branch, the automated RC workflow"
-	@echo "        creates PRs that target $(PACKAGE_BRANCH) for final release."
+	@echo "  Note: Releases are cut from $(RELEASE_SOURCE_BRANCH). The RC workflow then"
+	@echo "        creates a PR that targets $(PACKAGE_BRANCH) for final release."
 	@echo ""
 	@echo "🔄 AUTOMATED WORKFLOW (RC tags only):"
 	@echo "  1. Set your target RC version:"
 	@echo "     export PACKAGE_PUBLICATION_TAG_NEXT=v1.2.3-rc"
 	@echo ""
-	@echo "  2. Create and push RC tag (from any branch):"
-	@echo "     git checkout feature/my-branch  # Can be any branch"
+	@echo "  2. Create and push RC tag (from $(RELEASE_SOURCE_BRANCH)):"
+	@echo "     git checkout $(RELEASE_SOURCE_BRANCH) && git pull"
 	@echo "     make release  # Creates v1.2.3-rc tag"
 	@echo ""
 	@echo "  3. Automated process:"
-	@echo "     • GitHub Actions detects -rc tag (regardless of source branch)"
+	@echo "     • GitHub Actions detects -rc tag"
 	@echo "     • Creates PR: 'Auto Release PR: v1.2.3-rc' → $(PACKAGE_BRANCH)"
 	@echo "     • When PR merged → Strips '-rc' → Creates clean 'v1.2.3' tag"
 	@echo "     • Creates GitHub release from $(PACKAGE_BRANCH)"
@@ -381,22 +459,22 @@ release\:help:
 	@echo "  • Tag follows semantic versioning format"
 	@echo "  • Tag doesn't already exist"
 	@echo "  • Working directory is clean (no uncommitted changes)"
-	@echo "  • You're on the correct branch ($(PACKAGE_BRANCH) or ci/*)"
+	@echo "  • You're on the release source branch ($(RELEASE_SOURCE_BRANCH))"
 	@echo "  • Repository is up to date with origin"
 	@echo ""
 	@echo "🚨 TROUBLESHOOTING:"
 	@echo "  • 'Tag already exists' → Check: git tag -l | grep v1.2.3"
 	@echo "  • 'Uncommitted changes' → Commit or stash your changes"
-	@echo "  • 'Wrong branch' → Switch to $(PACKAGE_BRANCH) or ci/* branch"
+	@echo "  • 'Wrong branch' → Switch to $(RELEASE_SOURCE_BRANCH): git checkout $(RELEASE_SOURCE_BRANCH)"
 	@echo "  • 'Behind origin' → Run: make release:pull"
 	@echo "  • 'RC workflow failed' → Check GitHub Actions for details"
 	@echo "  • 'GOSUMDB errors' → Ensure Go 1.23+ is installed"
 	@echo ""
 	@echo "💡 TIPS:"
-	@echo "  • RC tags can be created from any branch/commit"
+	@echo "  • Cut RC tags from $(RELEASE_SOURCE_BRANCH); the release guard warns otherwise"
 	@echo "  • RC workflow always targets $(PACKAGE_BRANCH) for final release"
 	@echo "  • Branch protection ensures code review before release"
-	@echo "  • Use feature branches to tag experimental RCs safely"
+	@echo "  • The suggested tag reads Conventional Commits since the last release"
 	@echo "  • Final release will be created from $(PACKAGE_BRANCH) after PR merge"
 	@echo "  • RC iterations (v1.0.0-rc.1, v1.0.0-rc.2) all promote to same version"
 	@echo "  • Build metadata (+build.123) is ignored by version precedence"
