@@ -21,9 +21,9 @@ env:
   SKELETON_REPO: Cidekar/adele
   SKELETON_REF: main
   # Skeleton's published go.mod declares `go 1.24`, but `go mod tidy` against
-  # framework HEAD (`go 1.25.0`) bumps the local copy's directive to 1.25.
+  # framework HEAD (`go 1.26.0`) bumps the local copy's directive to 1.26.
   # Intentional — write stays in the CI working copy, not pushed upstream.
-  GO_VERSION: '1.25'
+  GO_VERSION: '1.26'
 
 jobs:
   skeleton-contract:

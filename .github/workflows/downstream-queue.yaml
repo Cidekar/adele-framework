@@ -23,7 +23,7 @@ env:
   # one do not silently break the other.
   QUEUE_REPO: Cidekar/adele-queue
   QUEUE_REF: main
-  GO_VERSION: '1.25'
+  GO_VERSION: '1.26'
 
 jobs:
   contract:
@@ -82,7 +82,7 @@ jobs:
           cat > smoketest/go.mod <<'EOF'
           module smoketest
 
-          go 1.25
+          go 1.26
 
           require (
             github.com/cidekar/adele-framework v0.0.0
