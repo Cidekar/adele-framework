@@ -576,3 +576,72 @@ func TestMux_CheckAnnotation(t *testing.T) {
 	t.Log(w.Result().StatusCode)
 
 }
+
+func TestMux_Query(t *testing.T) {
+
+	p := "/foo/bar/baz"
+
+	mf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+
+	mux := NewRouter()
+
+	mux.Query(p, mf)
+
+	added := false
+	for _, route := range mux.Routes() {
+
+		if route.Pattern == p && route.Handlers["QUERY"] != nil {
+			added = true
+		}
+	}
+
+	if added == false {
+		t.Error("mux query function did not add the route pattern and method")
+	}
+}
+
+func TestMux_Query_Annotation(t *testing.T) {
+
+	mux := NewRouter()
+
+	pattern := "/adele"
+
+	annotation := "[scopes:Foo Bar]"
+
+	mf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+
+	mux.Query(pattern+annotation, mf)
+
+	clean := false
+	raw := false
+	for _, route := range mux.Routes() {
+
+		if route.Pattern == pattern && route.Handlers["QUERY"] != nil {
+			clean = true
+		}
+
+		if route.Pattern == pattern+annotation {
+			raw = true
+		}
+	}
+
+	if clean == false {
+		t.Error("mux query function did not add the route under the clean pattern")
+	}
+
+	if raw == true {
+		t.Error("mux query function did not strip the scope annotation from the pattern")
+	}
+
+	recorded := false
+	for _, router := range MuxRouterTree {
+
+		if router.Route == pattern && router.Annotation == pattern+annotation {
+			recorded = true
+		}
+	}
+
+	if recorded == false {
+		t.Error("mux query function did not record the scope annotation for the route")
+	}
+}
