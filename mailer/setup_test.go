@@ -1,17 +1,15 @@
 package mailer
 
 import (
+	"context"
 	"log"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
-
-var pool *dockertest.Pool
-var resource *dockertest.Resource
 
 var mailer = Mail{
 	Domain:      "localhost",
@@ -26,48 +24,41 @@ var mailer = Mail{
 }
 
 func TestMain(m *testing.M) {
-	p, err := dockertest.NewPool("")
+	ctx := context.Background()
+
+	// Start MailHog container using the generic container API.
+	mailhogContainer, err := testcontainers.Run(ctx,
+		"mailhog/mailhog:latest",
+		testcontainers.WithExposedPorts("1025/tcp", "8025/tcp"),
+		testcontainers.WithWaitStrategy(
+			wait.ForListeningPort("1025/tcp").
+				WithStartupTimeout(30*time.Second),
+		),
+	)
 	if err != nil {
-		log.Fatal("can not connect to Docker", err)
+		log.Fatalf("could not start MailHog container: %v", err)
 	}
+	defer func() {
+		if err := mailhogContainer.Terminate(ctx); err != nil {
+			log.Printf("could not terminate MailHog container: %v", err)
+		}
+	}()
 
-	pool = p
-
-	options := dockertest.RunOptions{
-		Repository:   "mailhog/mailhog",
-		Tag:          "latest",
-		Env:          []string{},
-		ExposedPorts: []string{"1025", "8025"},
-		PortBindings: map[docker.Port][]docker.PortBinding{
-			"1025": {
-				{HostIP: "0.0.0.0", HostPort: "1029"},
-			},
-			"8025": {
-				{HostIP: "0.0.0.0", HostPort: "8029"},
-			},
-		},
-	}
-
-	resource, err := pool.RunWithOptions(&options)
+	// Point the mailer at the real mapped SMTP host and port.
+	host, err := mailhogContainer.Host(ctx)
 	if err != nil {
-		log.Println(err)
-		_ = pool.Purge(resource)
-		log.Fatal("Could not start resource")
+		log.Fatalf("could not get container host: %v", err)
 	}
 
-	// Cant ping Mailhog, so we sleep.
-	// Any way we can side-step a sleep?
+	port, err := mailhogContainer.MappedPort(ctx, "1025/tcp")
+	if err != nil {
+		log.Fatalf("could not get mapped SMTP port: %v", err)
+	}
 
-	time.Sleep(2 * time.Second)
+	mailer.Host = host
+	mailer.Port = port.Int()
 
 	go mailer.ListenForMail()
 
-	code := m.Run()
-
-	// Kill docker image
-	if err := pool.Purge(resource); err != nil {
-		log.Fatal("could not purge resource", err)
-	}
-
-	os.Exit(code)
+	os.Exit(m.Run())
 }
