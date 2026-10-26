@@ -15,7 +15,6 @@ var mailer = Mail{
 	Domain:      "localhost",
 	Templates:   "./testdata/mail",
 	Host:        "localhost",
-	Port:        1029,
 	Encryption:  "none",
 	FromAddress: "me@here.com",
 	FromName:    "Adel",
@@ -38,11 +37,6 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatalf("could not start MailHog container: %v", err)
 	}
-	defer func() {
-		if err := mailhogContainer.Terminate(ctx); err != nil {
-			log.Printf("could not terminate MailHog container: %v", err)
-		}
-	}()
 
 	// Point the mailer at the real mapped SMTP host and port.
 	host, err := mailhogContainer.Host(ctx)
@@ -60,5 +54,12 @@ func TestMain(m *testing.M) {
 
 	go mailer.ListenForMail()
 
-	os.Exit(m.Run())
+	code := m.Run()
+
+	// Terminate explicitly before os.Exit, which bypasses deferred calls.
+	if err := mailhogContainer.Terminate(ctx); err != nil {
+		log.Printf("could not terminate MailHog container: %v", err)
+	}
+
+	os.Exit(code)
 }
