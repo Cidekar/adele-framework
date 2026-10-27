@@ -131,33 +131,6 @@ jobs:
           mkdir -p /github/workspace/.gotmp
           chmod -R 777 /github/workspace/.gocache /github/workspace/.gotmp
 
-      - name: write version tag from release
-        run: |
-          GITHUB_REF_TAG=${{ steps.check_release.outputs.clean_tag }} go run .github/workflows/semantic-release-write-version.go
-          cat adele.go | grep  "const Version*"
-          echo "✅ Version tag written to source code"
-
-      - name: commit source code
-        env:
-            IS_ACT: ${{ env.ACT || 'false' }}
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN}}
-        run: |
-          if [ "$IS_ACT" = "true" ]; then
-            mkdir -p ~/.ssh
-            ssh-keyscan -H github.com >> ~/.ssh/known_hosts
-            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{secrets.GITHUB_USER}}/adele-framework.git
-          fi
-
-          if git diff --cached --quiet && git diff --quiet; then
-            echo "✅ No changes to commit"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git commit -a -m "write version tag ${{ steps.check_release.outputs.clean_tag }} to source code"
-            git push
-            echo "✅ Git commit completed successfully"
-          fi
-
       - name: install quill
         run: curl -sSfL https://raw.githubusercontent.com/anchore/quill/main/install.sh | sh -s -- -b .tmp/quill v0.4.1
 
