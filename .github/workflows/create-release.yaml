@@ -172,6 +172,35 @@ jobs:
           # Its the UUID you see when creating the App Store Connect key.
           QUILL_NOTARY_ISSUER: ${{ secrets.QUILL_NOTARY_ISSUER }}
 
+      - name: write grouped changelog into the release
+        if: steps.check_release.outputs.is_release_pr == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.check_release.outputs.clean_tag }}"
+          echo "Generating grouped changelog for $TAG..."
+
+          # Build the grouped changelog from commit messages.
+          CHANGELOG=$(bash .github/workflows/generate-changelog.sh "$TAG")
+
+          # Take the release body goreleaser just published (header + its own
+          # default "## Changelog" + footer) and replace everything from the
+          # first "## Changelog"/"## What's Changed" heading up to the footer
+          # with our grouped changelog, preserving the header and footer.
+          BODY=$(gh release view "$TAG" --json body --jq '.body')
+
+          HEADER=$(printf '%s\n' "$BODY" | awk '/^## (Changelog|What'"'"'s Changed)/{exit} {print}')
+          FOOTER=$(printf '%s\n' "$BODY" | awk '/^Those were the changes/{found=1} found{print}')
+
+          {
+            printf '%s\n' "$HEADER"
+            printf '%s\n\n' "$CHANGELOG"
+            printf '%s\n' "$FOOTER"
+          } > /tmp/release-notes.md
+
+          gh release edit "$TAG" --notes-file /tmp/release-notes.md
+          echo "✅ Release notes updated with grouped changelog"
+
       - name: clean go cache
         run: |
           go clean -modcache
