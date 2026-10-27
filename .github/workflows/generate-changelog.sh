@@ -40,11 +40,26 @@ SUBJECTS=$(git log --no-merges --format='%s' "$RANGE" 2>/dev/null \
   | grep -vE '^chore: bump version|^chore: allow actions workflow|^write version tag v|^ci\(release\):' \
   || true)
 
+# scrub_vendor: rewrite dependency-scanner references into neutral wording.
+# We don't control the Dependabot name in the alerts, so present these as
+# plain "security advisories"/"security fix" and drop the internal alert
+# numbers. Order matters: handle the parenthetical and the "alerts #..."
+# forms before the bare-word fallback.
+scrub_vendor() {
+  sed -E \
+    -e 's/ ?\(Dependabot[^)]*\)/ (security fix)/g' \
+    -e 's/Dependabot (Go )?alerts?[[:space:]]*#[0-9,#.-]*/security advisories/g' \
+    -e 's/Dependabot/security advisories/g' \
+    -e 's/  +/ /g' \
+    -e 's/ +$//'
+}
+
 # emit_group <type-regex> <label>: print the section if it has any commits.
 emit_group() {
   lines=$(printf '%s\n' "$SUBJECTS" \
     | grep -E "^$1(\(.*\))?!?:" 2>/dev/null \
     | sed -E 's/^[a-z]+(\(.*\))?!?: //' \
+    | scrub_vendor \
     | sed 's/^/- /' || true)
   if [ -n "$lines" ]; then
     printf '%s\n%s\n\n' "$2" "$lines"
