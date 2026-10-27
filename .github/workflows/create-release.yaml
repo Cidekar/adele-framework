@@ -10,6 +10,8 @@ jobs:
   release:
     env:
       BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+    permissions:
+      contents: write
     runs-on: ["self-hosted", "macOS", "ARM64", "cidekar", "macos-arm64"]
     if: github.event.pull_request.merged == true
     steps:
