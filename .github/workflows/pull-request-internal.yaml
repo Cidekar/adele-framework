@@ -196,7 +196,13 @@ jobs:
 
       - name: extract version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          # Strip any -rc suffix so the release PR ships the clean version.
+          # The -rc tag only triggers the workflow; the published release is clean.
+          CLEAN_VERSION=${VERSION%%-rc*}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "CLEAN_VERSION=$CLEAN_VERSION" >> $GITHUB_OUTPUT
 
       - name: create release branch
         env:
@@ -214,7 +220,7 @@ jobs:
 
       - name: write version tag from release
         run: |
-          GITHUB_REF_TAG=${{ steps.version.outputs.VERSION }} go run .github/workflows/semantic-release-write-version.go
+          GITHUB_REF_TAG=${{ steps.version.outputs.CLEAN_VERSION }} go run .github/workflows/semantic-release-write-version.go
           cat adele.go | grep  "const Version*"
           echo "✅ Version tag written to code"
 
