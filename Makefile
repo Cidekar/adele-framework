@@ -379,6 +379,22 @@ release\:get-current-tag:
 	@echo "   LAST KNOWN TAG:   $$(git tag -l --sort=-v:refname | head -n1 || echo 'No current tags found')"
 	@echo "   LAST RELEASE TAG: $$(git tag -l --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | head -n1 || echo 'No release tags found')"
 
+# Generate a grouped changelog from commit messages between the previous
+# release tag and TAG. Pass TAG=vX.Y.Z; defaults to the newest release tag.
+# Prints markdown to stdout — pipe it where you need it, e.g.
+#   make release:changelog TAG=v2.0.0 | gh release edit v2.0.0 --notes-file -
+.SILENT:
+release\:changelog:
+	@git fetch --tags origin --quiet 2>/dev/null || true
+	@TAG="$(TAG)"; \
+	if [ -z "$$TAG" ]; then \
+		TAG=$$(git tag -l --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | head -n1); \
+	fi; \
+	if [ -z "$$TAG" ]; then \
+		echo "No release tag found. Pass TAG=vX.Y.Z." >&2; exit 1; \
+	fi; \
+	bash .github/workflows/generate-changelog.sh "$$TAG"
+
 # Combined release target for convenience
 #@make release:pull release:verify
 .SILENT:
@@ -401,6 +417,7 @@ release\:help:
 	@echo "  make release:pull     - Pull latest changes from origin"
 	@echo "  make release:verify   - Verify and create release tag (interactive)"
 	@echo "  make release          - Run pull + verify in sequence"
+	@echo "  make release:changelog TAG=vX.Y.Z - Grouped changelog from commits (stdout)"
 	@echo ""
 	@echo "🏷️  SEMANTIC VERSIONING FORMAT:"
 	@echo "  Tags must follow: vMAJOR.MINOR.PATCH[-prerelease][+buildmeta]"
