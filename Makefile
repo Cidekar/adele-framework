@@ -244,6 +244,22 @@ release\:verify:
 		exit 1; \
 	fi
 
+	# Hard cap at major version 1. Go's module rule requires a /vN suffix in
+	# the module path (and in every importer's import path) for v2+; the
+	# module here is github.com/cidekar/adele-framework with no /vN, so a
+	# v2+ tag is invisible to `go get` and consumers keep resolving v1. Until
+	# the module path is migrated to /vN, releases must stay on v1.x.x.
+	@MAJOR=$$(echo "$(PACKAGE_PUBLICATION_TAG_NEXT)" | sed -E 's/^v([0-9]+)\..*/\1/'); \
+	if [ "$$MAJOR" -ge 2 ] 2>/dev/null; then \
+		echo "❗ Error: Tag '$(PACKAGE_PUBLICATION_TAG_NEXT)' bumps the major version to $$MAJOR."; \
+		echo "   Go requires a /v$$MAJOR suffix in the module path for v2+, which would"; \
+		echo "   break every importer until they migrate. Stay on v1.x.x."; \
+		echo "   (To actually ship v$$MAJOR you must first change the module path to"; \
+		echo "    github.com/cidekar/adele-framework/v$$MAJOR and update all consumers.)"; \
+		echo ""; \
+		exit 1; \
+	fi
+
 	# Check if tag already exists
 	@if git rev-parse $$PACKAGE_PUBLICATION_TAG_NEXT >/dev/null 2>&1; then \
 		echo "Error: Tag '$$PACKAGE_PUBLICATION_TAG_NEXT' already exists"; \
@@ -316,7 +332,7 @@ release\:preamble:
 	@echo "    v1.0.0-rc.beta            - Release candidate with label"
 	@echo "    v1.0.0-rc+build.123       - RC with build metadata"
 	@echo "    v1.0.0-rc.1+sha.abc123    - RC iteration with git hash"
-	@echo "    v10.21.34-rc              - Multi-digit RC versions"
+	@echo "    v1.21.34-rc               - Multi-digit minor/patch RC"
 	@echo ""
 
 release\:capture:
@@ -328,12 +344,11 @@ release\:capture:
 	 MAJOR=$${ver%%.*}; rest=$${ver#*.}; MINOR=$${rest%%.*}; PATCH=$${rest#*.}; \
 	 PATCH_V="v$$MAJOR.$$MINOR.$$((PATCH+1))"; \
 	 MINOR_V="v$$MAJOR.$$((MINOR+1)).0"; \
-	 MAJOR_V="v$$((MAJOR+1)).0.0"; \
 	 SUBJECTS=$$(git log --format='%s' "$$RANGE" 2>/dev/null); \
 	 BODIES=$$(git log --format='%b' "$$RANGE" 2>/dev/null); \
 	 N_COMMITS=$$(echo "$$SUBJECTS" | grep -c . 2>/dev/null); \
 	 if echo "$$BODIES" | grep -qi 'BREAKING CHANGE' || echo "$$SUBJECTS" | grep -qE '^[a-z]+(\([^)]*\))?!:'; then \
-		SUGGEST=major; DEFAULT=5; REC_TAG="$$MAJOR_V-rc"; REASON="breaking change since $$LAST"; \
+		SUGGEST=minor; DEFAULT=3; REC_TAG="$$MINOR_V-rc"; REASON="breaking change since $$LAST - capped at minor; v2+ needs a /vN module path"; \
 	 elif echo "$$SUBJECTS" | grep -qE '^feat(\([^)]*\))?:'; then \
 		SUGGEST=minor; DEFAULT=3; REC_TAG="$$MINOR_V-rc"; REASON="new feature since $$LAST"; \
 	 else \
@@ -348,9 +363,10 @@ release\:capture:
 	 printf "  2) %-12s patch release - manual\n" "$$PATCH_V"; \
 	 printf "  3) %-12s minor RC - triggers workflow\n" "$$MINOR_V-rc"; \
 	 printf "  4) %-12s minor release - manual\n" "$$MINOR_V"; \
-	 printf "  5) %-12s major RC - triggers workflow\n" "$$MAJOR_V-rc"; \
-	 printf "  6) %-12s major release - manual\n" "$$MAJOR_V"; \
-	 echo "  7) enter tag manually"; \
+	 echo "  5) enter tag manually"; \
+	 echo ""; \
+	 echo "  (major/v2+ bumps are disabled: the module path has no /vN suffix,"; \
+	 echo "   so a v2+ tag is invisible to 'go get'. Stay on v1.x.x.)"; \
 	 echo ""; \
 	 read -p "Select [$$DEFAULT] (Enter = $$REC_TAG): " choice; choice=$${choice:-$$DEFAULT}; \
 	 case "$$choice" in \
@@ -358,9 +374,7 @@ release\:capture:
 		2) NEXT_TAG="$$PATCH_V" ;; \
 		3) NEXT_TAG="$$MINOR_V-rc" ;; \
 		4) NEXT_TAG="$$MINOR_V" ;; \
-		5) NEXT_TAG="$$MAJOR_V-rc" ;; \
-		6) NEXT_TAG="$$MAJOR_V" ;; \
-		7) read -p "Enter new tag: " NEXT_TAG ;; \
+		5) read -p "Enter new tag: " NEXT_TAG ;; \
 		*) echo "❗ Invalid selection: $$choice"; exit 1 ;; \
 	 esac; \
 	 echo ""; \
@@ -378,6 +392,22 @@ release\:get-current-tag:
 	fi
 	@echo "   LAST KNOWN TAG:   $$(git tag -l --sort=-v:refname | head -n1 || echo 'No current tags found')"
 	@echo "   LAST RELEASE TAG: $$(git tag -l --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | head -n1 || echo 'No release tags found')"
+
+# Generate a grouped changelog from commit messages between the previous
+# release tag and TAG. Pass TAG=vX.Y.Z; defaults to the newest release tag.
+# Prints markdown to stdout — pipe it where you need it, e.g.
+#   make release:changelog TAG=v2.0.0 | gh release edit v2.0.0 --notes-file -
+.SILENT:
+release\:changelog:
+	@git fetch --tags origin --quiet 2>/dev/null || true
+	@TAG="$(TAG)"; \
+	if [ -z "$$TAG" ]; then \
+		TAG=$$(git tag -l --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | head -n1); \
+	fi; \
+	if [ -z "$$TAG" ]; then \
+		echo "No release tag found. Pass TAG=vX.Y.Z." >&2; exit 1; \
+	fi; \
+	bash .github/workflows/generate-changelog.sh "$$TAG"
 
 # Combined release target for convenience
 #@make release:pull release:verify
@@ -401,6 +431,7 @@ release\:help:
 	@echo "  make release:pull     - Pull latest changes from origin"
 	@echo "  make release:verify   - Verify and create release tag (interactive)"
 	@echo "  make release          - Run pull + verify in sequence"
+	@echo "  make release:changelog TAG=vX.Y.Z - Grouped changelog from commits (stdout)"
 	@echo ""
 	@echo "🏷️  SEMANTIC VERSIONING FORMAT:"
 	@echo "  Tags must follow: vMAJOR.MINOR.PATCH[-prerelease][+buildmeta]"
@@ -411,13 +442,13 @@ release\:help:
 	@echo "    v1.0.0-rc.beta            - Release candidate with label"
 	@echo "    v1.0.0-rc+build.123       - RC with build metadata"
 	@echo "    v1.0.0-rc.1+sha.abc123    - RC iteration with git hash"
-	@echo "    v10.21.34-rc              - Multi-digit RC versions"
+	@echo "    v1.21.34-rc               - Multi-digit minor/patch RC"
 	@echo ""
 	@echo "  ✅ Valid semver (but won't trigger workflow):"
 	@echo "    v1.0.0                    - Basic release (manual only)"
 	@echo "    v1.0.0-alpha              - Alpha prerelease (manual only)"
 	@echo "    v1.0.0-beta.2             - Beta prerelease (manual only)"
-	@echo "    v2.1.0+exp.sha.5114f85    - Build metadata only (manual only)"
+	@echo "    v1.21.0+exp.sha.5114f85   - Build metadata only (manual only)"
 	@echo ""
 	@echo "  ❌ Invalid examples:"
 	@echo "    1.0.0        - Missing 'v' prefix"
