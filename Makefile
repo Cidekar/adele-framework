@@ -244,6 +244,22 @@ release\:verify:
 		exit 1; \
 	fi
 
+	# Hard cap at major version 1. Go's module rule requires a /vN suffix in
+	# the module path (and in every importer's import path) for v2+; the
+	# module here is github.com/cidekar/adele-framework with no /vN, so a
+	# v2+ tag is invisible to `go get` and consumers keep resolving v1. Until
+	# the module path is migrated to /vN, releases must stay on v1.x.x.
+	@MAJOR=$$(echo "$(PACKAGE_PUBLICATION_TAG_NEXT)" | sed -E 's/^v([0-9]+)\..*/\1/'); \
+	if [ "$$MAJOR" -ge 2 ] 2>/dev/null; then \
+		echo "❗ Error: Tag '$(PACKAGE_PUBLICATION_TAG_NEXT)' bumps the major version to $$MAJOR."; \
+		echo "   Go requires a /v$$MAJOR suffix in the module path for v2+, which would"; \
+		echo "   break every importer until they migrate. Stay on v1.x.x."; \
+		echo "   (To actually ship v$$MAJOR you must first change the module path to"; \
+		echo "    github.com/cidekar/adele-framework/v$$MAJOR and update all consumers.)"; \
+		echo ""; \
+		exit 1; \
+	fi
+
 	# Check if tag already exists
 	@if git rev-parse $$PACKAGE_PUBLICATION_TAG_NEXT >/dev/null 2>&1; then \
 		echo "Error: Tag '$$PACKAGE_PUBLICATION_TAG_NEXT' already exists"; \
@@ -328,12 +344,11 @@ release\:capture:
 	 MAJOR=$${ver%%.*}; rest=$${ver#*.}; MINOR=$${rest%%.*}; PATCH=$${rest#*.}; \
 	 PATCH_V="v$$MAJOR.$$MINOR.$$((PATCH+1))"; \
 	 MINOR_V="v$$MAJOR.$$((MINOR+1)).0"; \
-	 MAJOR_V="v$$((MAJOR+1)).0.0"; \
 	 SUBJECTS=$$(git log --format='%s' "$$RANGE" 2>/dev/null); \
 	 BODIES=$$(git log --format='%b' "$$RANGE" 2>/dev/null); \
 	 N_COMMITS=$$(echo "$$SUBJECTS" | grep -c . 2>/dev/null); \
 	 if echo "$$BODIES" | grep -qi 'BREAKING CHANGE' || echo "$$SUBJECTS" | grep -qE '^[a-z]+(\([^)]*\))?!:'; then \
-		SUGGEST=major; DEFAULT=5; REC_TAG="$$MAJOR_V-rc"; REASON="breaking change since $$LAST"; \
+		SUGGEST=minor; DEFAULT=3; REC_TAG="$$MINOR_V-rc"; REASON="breaking change since $$LAST - capped at minor; v2+ needs a /vN module path"; \
 	 elif echo "$$SUBJECTS" | grep -qE '^feat(\([^)]*\))?:'; then \
 		SUGGEST=minor; DEFAULT=3; REC_TAG="$$MINOR_V-rc"; REASON="new feature since $$LAST"; \
 	 else \
@@ -348,9 +363,10 @@ release\:capture:
 	 printf "  2) %-12s patch release - manual\n" "$$PATCH_V"; \
 	 printf "  3) %-12s minor RC - triggers workflow\n" "$$MINOR_V-rc"; \
 	 printf "  4) %-12s minor release - manual\n" "$$MINOR_V"; \
-	 printf "  5) %-12s major RC - triggers workflow\n" "$$MAJOR_V-rc"; \
-	 printf "  6) %-12s major release - manual\n" "$$MAJOR_V"; \
-	 echo "  7) enter tag manually"; \
+	 echo "  5) enter tag manually"; \
+	 echo ""; \
+	 echo "  (major/v2+ bumps are disabled: the module path has no /vN suffix,"; \
+	 echo "   so a v2+ tag is invisible to 'go get'. Stay on v1.x.x.)"; \
 	 echo ""; \
 	 read -p "Select [$$DEFAULT] (Enter = $$REC_TAG): " choice; choice=$${choice:-$$DEFAULT}; \
 	 case "$$choice" in \
@@ -358,9 +374,7 @@ release\:capture:
 		2) NEXT_TAG="$$PATCH_V" ;; \
 		3) NEXT_TAG="$$MINOR_V-rc" ;; \
 		4) NEXT_TAG="$$MINOR_V" ;; \
-		5) NEXT_TAG="$$MAJOR_V-rc" ;; \
-		6) NEXT_TAG="$$MAJOR_V" ;; \
-		7) read -p "Enter new tag: " NEXT_TAG ;; \
+		5) read -p "Enter new tag: " NEXT_TAG ;; \
 		*) echo "❗ Invalid selection: $$choice"; exit 1 ;; \
 	 esac; \
 	 echo ""; \
