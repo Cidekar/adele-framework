@@ -12,6 +12,12 @@ on:
 jobs:
   release:
     runs-on: ["self-hosted", "macOS", "ARM64", "cidekar", "macos-arm64"]
+    # GITHUB_TOKEN defaults to read-only (repo/org default workflow
+    # permission). This job pushes the release branch and opens a PR, so
+    # it needs write scopes granted explicitly.
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: install github CLI
         run: |
