@@ -237,6 +237,12 @@ func (r *Mux) Middlewares() chi.Middlewares {
 	return r.Mux.Middlewares()
 }
 
+// Query adds the route `pattern` that matches a QUERY http method to execute the
+// `handler` http.HandlerFunc.
+func (r *Mux) Query(pattern string, handler http.HandlerFunc) {
+	r.Mux.Query(cleanMuxScopeAnnotation(pattern), handler)
+}
+
 // Routes returns a slice of routing information from the tree, useful
 // for traversing available routes of a router.
 func (r *Mux) Routes() []chi.Route {
