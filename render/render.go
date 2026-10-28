@@ -26,6 +26,11 @@ import (
 // runtime directory, fstest.MapFS for tests, or a custom backing. A caller that
 // needs jet.Set options (for example jet.InDevelopmentMode()) should build the
 // set with NewFSLoader directly.
+//
+// Template names are caller-supplied and trusted; they MUST NOT be
+// end-user-controlled, because an absolute name containing ".." can resolve to a
+// sibling file inside fsys (it cannot escape the FS root, but it can reach a
+// sibling of dir).
 func NewJetSetFromFS(fsys fs.FS, dir string) *jet.Set {
 	return jet.NewSet(NewFSLoader(fsys, dir))
 }

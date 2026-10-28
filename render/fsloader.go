@@ -30,8 +30,16 @@ type fsLoader struct {
 // fstest.MapFS reject keys with a leading slash. The TrimPrefix guard strips it
 // so empty-dir callers resolve. (When dir is non-empty, path.Join already
 // strips the leading slash, so the guard is a no-op.)
+//
+// dir is a hard floor: an absolute ".." name (e.g. "/../secret.md.jet") must not
+// climb to a sibling of dir inside fsys. When the join escapes dir, fall back to
+// dir + base name so the key stays within dir.
 func (l *fsLoader) resolve(name string) string {
-	return strings.TrimPrefix(path.Join(l.dir, name), "/")
+	key := path.Join(l.dir, name)
+	if l.dir != "" && key != l.dir && !strings.HasPrefix(key, l.dir+"/") {
+		key = path.Join(l.dir, path.Base(name))
+	}
+	return strings.TrimPrefix(key, "/")
 }
 
 // Open returns the template's contents. jet closes the reader.

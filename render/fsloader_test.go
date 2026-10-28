@@ -153,3 +153,54 @@ func TestRenderToString_ArbitraryStruct(t *testing.T) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
+
+// TestRenderToString_DirFloorNoEscape proves the dir floor: a "/../x"-style name
+// must not reach a sibling of dir. The outside file sits next to dir; the inside
+// file sits under dir. The escaping name must not load the outside file.
+func TestRenderToString_DirFloorNoEscape(t *testing.T) {
+	fsys := fstest.MapFS{
+		"views/safe.md.jet": &fstest.MapFile{Data: []byte("inside")},
+		"secret.md.jet":     &fstest.MapFile{Data: []byte("OUTSIDE")},
+	}
+	set := NewJetSetFromFS(fsys, "views")
+
+	got, err := RenderToString(set, "/../secret.md", nil)
+	if err == nil && got == "OUTSIDE" {
+		t.Fatalf("escaping name reached a sibling of dir: got %q", got)
+	}
+}
+
+// TestRenderToString_UnknownTemplate_FSLoader proves the unknown-template error
+// path through the NewJetSetFromFS seam (not the OS loader).
+func TestRenderToString_UnknownTemplate_FSLoader(t *testing.T) {
+	fsys := fstest.MapFS{
+		"views/issue.md.jet": &fstest.MapFile{Data: []byte("# {{ .Title }}\n")},
+	}
+	set := NewJetSetFromFS(fsys, "views")
+
+	got, err := RenderToString(set, "does-not-exist.md", nil)
+	if err == nil {
+		t.Fatal("expected an error for an unknown template, got nil")
+	}
+	if got != "" {
+		t.Fatalf("expected empty string on error, got %q", got)
+	}
+}
+
+// TestRenderToString_TopLevelAssignment_FSLoader proves a top-level
+// {{ x := ... }} renders without panic through the NewJetSetFromFS seam, locking
+// the non-nil VarMap choice for the new loader. A nil VarMap would panic.
+func TestRenderToString_TopLevelAssignment_FSLoader(t *testing.T) {
+	fsys := fstest.MapFS{
+		"views/toplevel.jet": &fstest.MapFile{Data: []byte(`{{ x := "ok" }}{{ x }}`)},
+	}
+	set := NewJetSetFromFS(fsys, "views")
+
+	got, err := RenderToString(set, "toplevel", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.TrimSpace(got) != "ok" {
+		t.Fatalf("got %q, want %q", got, "ok")
+	}
+}
