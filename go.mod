@@ -15,7 +15,7 @@ require (
 	github.com/fatih/camelcase v1.0.0
 	github.com/fatih/color v1.18.0
 	github.com/gabriel-vasile/mimetype v1.4.1
-	github.com/go-chi/chi/v5 v5.4.0
+	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-chi/cors v1.2.2
 	github.com/go-chi/httprate v0.15.0
 	github.com/go-git/go-git/v5 v5.19.2
