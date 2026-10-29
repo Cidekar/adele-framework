@@ -263,7 +263,11 @@ jobs:
 
             else
               # Non-zero exit - determine if it's auth failure or vulnerabilities
-              if grep -q "401 Unauthorized\|error accessing OSS Index\|authentication" nancy-detailed.txt; then
+              # Match only genuine credential/HTTP-status signals. Do NOT match a bare
+              # "authentication": CVE/CWE descriptions (e.g. go-chi "Authentication Bypass",
+              # "CWE-288: Authentication Bypass") contain that word and would mislabel a
+              # real vulnerability run as an auth failure, hiding the findings.
+              if grep -q "401 Unauthorized\|403 Forbidden\|error accessing OSS Index\|Invalid credentials" nancy-detailed.txt; then
                 echo "❌ Authentication failed - check your OSS Index credentials"
                 echo "Error details:"
                 cat nancy-detailed.txt
