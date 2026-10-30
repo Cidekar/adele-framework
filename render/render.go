@@ -6,9 +6,11 @@
 package render
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log"
 	"net/http"
 	"strings"
@@ -16,6 +18,58 @@ import (
 	"github.com/CloudyKit/jet/v6"
 	"github.com/justinas/nosurf"
 )
+
+// NewJetSetFromFS builds a jet.Set that loads templates from fsys, rooted at dir.
+//
+// It is the convenience wrapper over NewFSLoader. fsys may be any fs.FS: an
+// embed.FS from //go:embed (templates compiled into the binary), os.DirFS for a
+// runtime directory, fstest.MapFS for tests, or a custom backing. A caller that
+// needs jet.Set options (for example jet.InDevelopmentMode()) should build the
+// set with NewFSLoader directly.
+//
+// Template names are caller-supplied and trusted; they MUST NOT be
+// end-user-controlled, because an absolute name containing ".." can resolve to a
+// sibling file inside fsys (it cannot escape the FS root, but it can reach a
+// sibling of dir).
+func NewJetSetFromFS(fsys fs.FS, dir string) *jet.Set {
+	return jet.NewSet(NewFSLoader(fsys, dir))
+}
+
+// RenderToString executes templateName against set and returns the result as a
+// string. It performs NO HTTP, session, CSRF, or TemplateData handling; data is
+// passed to the template verbatim as its execution context. It does NO CSS
+// inlining and injects NO default data. Use it to produce any text output (for
+// example a Markdown body for an external API) from a Jet template.
+//
+// templateName is the name as the Jet set's loader sees it (loader-relative);
+// jet appends its default extensions, so "issue.md" and "issue.md.jet" can both
+// resolve issue.md.jet.
+//
+// templateName is caller-supplied and trusted; it MUST NOT be end-user-controlled,
+// because an absolute name containing ".." can resolve to a sibling file inside the
+// same fs.FS (it cannot escape the FS root, but it can reach a sibling of dir).
+func RenderToString(set *jet.Set, templateName string, data interface{}) (string, error) {
+	if set == nil {
+		return "", errors.New("render: nil jet set")
+	}
+
+	t, err := set.GetTemplate(templateName)
+	if err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+
+	// Pass a non-nil empty VarMap, NOT nil. jet assigns this map to the top
+	// template scope's variables field; a top-level {{ x := ... }} then writes to
+	// it. A write to a nil map panics, so nil is unsafe for any template with a
+	// top-level variable. make(jet.VarMap) is robust for all templates.
+	if err := t.Execute(&buf, make(jet.VarMap), data); err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
+}
 
 func (a *Render) defaultData(td *TemplateData, r *http.Request) *TemplateData {
 	td.Secure = a.Secure
