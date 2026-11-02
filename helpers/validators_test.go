@@ -395,6 +395,92 @@ func TestValidation_Password(t *testing.T) {
 	}
 }
 
+func TestValidation_SliceLen(t *testing.T) {
+	// In range
+	v := createValidation()
+	v.SliceLen("tags", []string{"a", "b", "c"}, 1, 5)
+	if _, exists := v.Errors["tags"]; exists {
+		t.Error("Should not have error for a slice count in range")
+	}
+
+	// Exact minimum boundary
+	v = createValidation()
+	v.SliceLen("minEdge", []string{"a", "b"}, 2, 5)
+	if _, exists := v.Errors["minEdge"]; exists {
+		t.Error("Should not have error at the exact minimum count")
+	}
+
+	// Exact maximum boundary
+	v = createValidation()
+	v.SliceLen("maxEdge", []string{"a", "b", "c"}, 1, 3)
+	if _, exists := v.Errors["maxEdge"]; exists {
+		t.Error("Should not have error at the exact maximum count")
+	}
+
+	// Below minimum
+	v = createValidation()
+	v.SliceLen("belowMin", []string{"a"}, 2, 5)
+	if _, exists := v.Errors["belowMin"]; !exists {
+		t.Error("Should have error for a slice count below minimum")
+	}
+	if got := v.Errors["belowMin"]; got != "The belowMin field must contain at least 2 items" {
+		t.Errorf("below-min message = %q, want %q", got, "The belowMin field must contain at least 2 items")
+	}
+
+	// Above maximum
+	v = createValidation()
+	v.SliceLen("aboveMax", []string{"a", "b", "c", "d"}, 1, 3)
+	if _, exists := v.Errors["aboveMax"]; !exists {
+		t.Error("Should have error for a slice count above maximum")
+	}
+	if got := v.Errors["aboveMax"]; got != "The aboveMax field must not contain more than 3 items" {
+		t.Errorf("above-max message = %q, want %q", got, "The aboveMax field must not contain more than 3 items")
+	}
+
+	// Empty slice with min of 0 passes
+	v = createValidation()
+	v.SliceLen("emptyMinZero", []string{}, 0, 5)
+	if _, exists := v.Errors["emptyMinZero"]; exists {
+		t.Error("Should not have error for an empty slice when min is 0")
+	}
+
+	// Empty slice with min above 0 fails
+	v = createValidation()
+	v.SliceLen("emptyMinOne", []string{}, 1, 5)
+	if _, exists := v.Errors["emptyMinOne"]; !exists {
+		t.Error("Should have error for an empty slice when min is above 0")
+	}
+
+	// Nil slice with min of 0 passes
+	v = createValidation()
+	v.SliceLen("nilMinZero", nil, 0, 5)
+	if _, exists := v.Errors["nilMinZero"]; exists {
+		t.Error("Should not have error for a nil slice when min is 0")
+	}
+
+	// Min of 0 with a populated slice under max passes
+	v = createValidation()
+	v.SliceLen("minZero", []string{"a", "b"}, 0, 5)
+	if _, exists := v.Errors["minZero"]; exists {
+		t.Error("Should not have error when min is 0 and count is under max")
+	}
+
+	// Contradictory bounds (min > max): min is checked first, so the min-branch
+	// message fires. This pins the current precedence.
+	v = createValidation()
+	v.SliceLen("badBounds", []string{"a"}, 5, 2)
+	if got := v.Errors["badBounds"]; got != "The badBounds field must contain at least 5 items" {
+		t.Errorf("min>max message = %q, want %q", got, "The badBounds field must contain at least 5 items")
+	}
+
+	// Singular wording: a bound of 1 uses "item", not "items".
+	v = createValidation()
+	v.SliceLen("singular", []string{}, 1, 5)
+	if got := v.Errors["singular"]; got != "The singular field must contain at least 1 item" {
+		t.Errorf("singular message = %q, want %q", got, "The singular field must contain at least 1 item")
+	}
+}
+
 func TestValidation_Valid(t *testing.T) {
 	// Test validation with no errors
 	v1 := createValidation()
@@ -477,8 +563,8 @@ func TestIsEmailScriptSafe(t *testing.T) {
 
 		// --- Fail cases: non-whitelisted multi-script combos -------------
 		{"hangul_plus_han_no_latin_ok", "한中@example.com", true}, // Korean+Han is whitelisted-adjacent: Han+Hangul (no Latin) — still subset of {Latin, Han, Hangul}, passes.
-		{"hangul_plus_hiragana_fail", "한ひ@example.com", false}, // Korean + Japanese hiragana — no whitelist
-		{"cyrillic_plus_greek_fail", "аα@example.com", false},  // pure spoof: Cyrillic + Greek
+		{"hangul_plus_hiragana_fail", "한ひ@example.com", false},  // Korean + Japanese hiragana — no whitelist
+		{"cyrillic_plus_greek_fail", "аα@example.com", false},   // pure spoof: Cyrillic + Greek
 
 		// --- Edge cases --------------------------------------------------
 		{"empty_string", "", true}, // ASCII-only fast path; caller chains IsEmailRFC for emptiness check
