@@ -334,6 +334,22 @@ func (v *Validation) NoSpaces(field, value string) {
 	}
 }
 
+// In validates that a field's value is a member of the allowed set using an
+// exact, case-sensitive string match. An empty allowed set means no value is
+// valid (fail-closed), so the field always gets an error.
+//
+// Example:
+//
+//	role := r.Form.Get("role")
+//	validator.In("role", role, "admin", "editor", "viewer")
+//
+// Accepts "admin", but rejects "Admin" (case-sensitive) and "owner"
+func (v *Validation) In(field, value string, allowed ...string) {
+	if !govalidator.IsIn(value, allowed...) {
+		v.AddError(field, "This field must be one of the allowed values")
+	}
+}
+
 // NotEmpty validates that a field is not empty after trimming whitespace.
 // Accepts optional custom error message, otherwise uses default message.
 //
