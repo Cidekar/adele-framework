@@ -3,15 +3,15 @@
 package handlers
 
 import (
-	"fmt"
 	"$APPNAME$/models"
+	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/CloudyKit/jet/v6"
 	"github.com/cidekar/adele-framework/auth"
 	"github.com/cidekar/adele-framework/mailer"
 	"github.com/cidekar/adele-framework/urlsigner"
-	"github.com/CloudyKit/jet/v6"
 )
 
 /*
@@ -296,7 +296,7 @@ func (h *Handlers) RegistrationPost(w http.ResponseWriter, r *http.Request) {
 
 	if r.Form.Get("email") != "" {
 		validator.IsEmail("email", r.Form.Get("email"))
-		validator.IsEmailInPublicDomain("email", r.Form.Get("email"))
+		validator.IsEmailInPublicDomain(r.Context(), "email", r.Form.Get("email"))
 	}
 
 	user, _ := h.Models.Users.GetByEmail(r.Form.Get("email"))
@@ -588,7 +588,7 @@ func (h *Handlers) ProfilePost(w http.ResponseWriter, r *http.Request) {
 
 		if r.Form.Get("email") != "" {
 			validator.IsEmail("email", r.Form.Get("email"))
-			validator.IsEmailInPublicDomain("email", r.Form.Get("email"))
+			validator.IsEmailInPublicDomain(r.Context(), "email", r.Form.Get("email"))
 		}
 
 		u, _ := h.Models.Users.GetByEmail(r.Form.Get("email"))
