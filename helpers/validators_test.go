@@ -691,3 +691,50 @@ func TestIsEmailMX_LiveLookup(t *testing.T) {
 		})
 	}
 }
+
+// ----------------------------------------------------------------------------
+// In — exact, case-sensitive membership against an allowed set. An empty
+// allowed set is fail-closed, so the field always gets an error.
+// ----------------------------------------------------------------------------
+
+func TestValidation_In(t *testing.T) {
+	cases := []struct {
+		name    string
+		value   string
+		allowed []string
+		want    bool // true = pass (member), false = fail (error added)
+	}{
+		{"member", "admin", []string{"admin", "editor", "viewer"}, true},
+		{"non_member", "superuser", []string{"admin", "editor", "viewer"}, false},
+		{"empty_allowed_set_fail_closed", "admin", []string{}, false},
+		{"duplicate_entries_member", "editor", []string{"admin", "editor", "editor", "viewer"}, true},
+		{"duplicate_entries_non_member", "superuser", []string{"admin", "admin", "editor"}, false},
+		{"case_sensitive_mismatch", "Admin", []string{"admin"}, false},
+		{"case_sensitive_match", "Admin", []string{"Admin", "Editor"}, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := createValidation()
+			v.In("role", tc.value, tc.allowed...)
+
+			_, hasErr := v.Errors["role"]
+			if tc.want {
+				if hasErr {
+					t.Fatalf("In(%q, %v) added an error, want none (errors=%v)",
+						tc.value, tc.allowed, v.Errors)
+				}
+				if !v.Valid() {
+					t.Fatalf("expected Valid() true on pass, got false (errors=%v)", v.Errors)
+				}
+			} else {
+				if !hasErr {
+					t.Fatalf("In(%q, %v) added no error, want one", tc.value, tc.allowed)
+				}
+				if v.Valid() {
+					t.Fatalf("expected Valid() false on fail, got true")
+				}
+			}
+		})
+	}
+}
