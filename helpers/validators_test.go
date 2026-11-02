@@ -423,12 +423,18 @@ func TestValidation_SliceLen(t *testing.T) {
 	if _, exists := v.Errors["belowMin"]; !exists {
 		t.Error("Should have error for a slice count below minimum")
 	}
+	if got := v.Errors["belowMin"]; got != "The belowMin field must contain at least 2 items" {
+		t.Errorf("below-min message = %q, want %q", got, "The belowMin field must contain at least 2 items")
+	}
 
 	// Above maximum
 	v = createValidation()
 	v.SliceLen("aboveMax", []string{"a", "b", "c", "d"}, 1, 3)
 	if _, exists := v.Errors["aboveMax"]; !exists {
 		t.Error("Should have error for a slice count above maximum")
+	}
+	if got := v.Errors["aboveMax"]; got != "The aboveMax field must not contain more than 3 items" {
+		t.Errorf("above-max message = %q, want %q", got, "The aboveMax field must not contain more than 3 items")
 	}
 
 	// Empty slice with min of 0 passes
@@ -457,6 +463,21 @@ func TestValidation_SliceLen(t *testing.T) {
 	v.SliceLen("minZero", []string{"a", "b"}, 0, 5)
 	if _, exists := v.Errors["minZero"]; exists {
 		t.Error("Should not have error when min is 0 and count is under max")
+	}
+
+	// Contradictory bounds (min > max): min is checked first, so the min-branch
+	// message fires. This pins the current precedence.
+	v = createValidation()
+	v.SliceLen("badBounds", []string{"a"}, 5, 2)
+	if got := v.Errors["badBounds"]; got != "The badBounds field must contain at least 5 items" {
+		t.Errorf("min>max message = %q, want %q", got, "The badBounds field must contain at least 5 items")
+	}
+
+	// Singular wording: a bound of 1 uses "item", not "items".
+	v = createValidation()
+	v.SliceLen("singular", []string{}, 1, 5)
+	if got := v.Errors["singular"]; got != "The singular field must contain at least 1 item" {
+		t.Errorf("singular message = %q, want %q", got, "The singular field must contain at least 1 item")
 	}
 }
 

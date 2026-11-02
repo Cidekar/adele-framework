@@ -319,9 +319,13 @@ func (v *Validation) StringLength(field, value string, minLength, maxLength int)
 	}
 }
 
-// SliceLen validates that a slice's item count is within the specified range.
-// A min of 0 means no lower bound, so the check becomes a maximum only. An
-// empty or nil slice has a count of 0, so it fails when min is greater than 0.
+// SliceLen validates that a string slice's item count is within the specified
+// range. Bounds are inclusive and should satisfy 0 <= min <= max; min = 0 means
+// no lower bound, so the check becomes a maximum only. An empty or nil slice has
+// a count of 0, so it fails when min is greater than 0. SliceLen bounds the
+// count after the slice is already in memory, so it is a correctness bound and
+// not the primary defense against oversized request bodies; that is an upstream
+// body-size limit.
 //
 // Example:
 //
@@ -332,9 +336,17 @@ func (v *Validation) SliceLen(field string, values []string, min, max int) {
 	length := len(values)
 
 	if length < min {
-		v.AddError(field, fmt.Sprintf("The %s field must contain at least %d items", field, min))
+		noun := "items"
+		if min == 1 {
+			noun = "item"
+		}
+		v.AddError(field, fmt.Sprintf("The %s field must contain at least %d %s", field, min, noun))
 	} else if length > max {
-		v.AddError(field, fmt.Sprintf("The %s field must not contain more than %d items", field, max))
+		noun := "items"
+		if max == 1 {
+			noun = "item"
+		}
+		v.AddError(field, fmt.Sprintf("The %s field must not contain more than %d %s", field, max, noun))
 	}
 }
 
