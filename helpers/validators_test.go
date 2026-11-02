@@ -2,6 +2,9 @@ package helpers
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -410,9 +413,180 @@ func TestValidation_Valid(t *testing.T) {
 	}
 }
 
-// Note: PasswordUncompromised is not tested here as it makes external HTTP requests
-// In a real application, you would mock the HTTP client or use dependency injection
-// to make this method testable without making actual network calls.
+// ----------------------------------------------------------------------------
+// PasswordUncompromised — offline tests against an httptest HaveIBeenPwned stub.
+//
+// pwnedBaseURL is a package var so each test points it at a local server and
+// restores the original on exit. These subtests touch the shared global, so they
+// must stay non-parallel.
+// ----------------------------------------------------------------------------
+
+const (
+	// breachMessage is the error recorded when a password is found in a breach.
+	breachMessage = "The password provided was discovered in a recent data leak; please select another password."
+	// unverifiableMessage is the fail-closed error when the check cannot reach a
+	// verdict (transport error, non-200, timeout, and so on).
+	unverifiableMessage = "Could not verify the password against the breach database. Please try again."
+)
+
+// pwnedSuffix returns the uppercase-hex SHA1 suffix (chars [5:]) for value, the
+// part HaveIBeenPwned returns in its range response body.
+func pwnedSuffix(value string) string {
+	hasher := sha1.New()
+	hasher.Write([]byte(value))
+	hash := strings.ToUpper(hex.EncodeToString(hasher.Sum(nil)))
+	return hash[5:]
+}
+
+func TestPasswordUncompromised_Breach(t *testing.T) {
+	original := pwnedBaseURL
+	defer func() { pwnedBaseURL = original }()
+
+	const password = "ValidPass123"
+	suffix := pwnedSuffix(password)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "%s:5\n", suffix)
+	}))
+	defer server.Close()
+	pwnedBaseURL = server.URL + "/"
+
+	v := createValidation()
+	if got := v.PasswordUncompromised(context.Background(), "password", password); got {
+		t.Fatal("PasswordUncompromised returned true for a breached password, want false")
+	}
+	if v.Errors["password"] != breachMessage {
+		t.Fatalf("expected breach message, got %q", v.Errors["password"])
+	}
+}
+
+func TestPasswordUncompromised_Clean(t *testing.T) {
+	original := pwnedBaseURL
+	defer func() { pwnedBaseURL = original }()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A suffix that cannot match the real one.
+		fmt.Fprint(w, "0000000000000000000000000000000000000:3\n")
+	}))
+	defer server.Close()
+	pwnedBaseURL = server.URL + "/"
+
+	v := createValidation()
+	if got := v.PasswordUncompromised(context.Background(), "password", "ValidPass123"); !got {
+		t.Fatal("PasswordUncompromised returned false for a clean password, want true")
+	}
+	if !v.Valid() {
+		t.Fatalf("expected no error on clean password, got %v", v.Errors)
+	}
+}
+
+func TestPasswordUncompromised_ThresholdBelow(t *testing.T) {
+	original := pwnedBaseURL
+	defer func() { pwnedBaseURL = original }()
+
+	const password = "ValidPass123"
+	suffix := pwnedSuffix(password)
+
+	// The suffix matches, but the count is below the threshold, so it must pass.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "%s:2\n", suffix)
+	}))
+	defer server.Close()
+	pwnedBaseURL = server.URL + "/"
+
+	v := createValidation()
+	if got := v.PasswordUncompromised(context.Background(), "password", password, 5); !got {
+		t.Fatal("PasswordUncompromised returned false below threshold, want true")
+	}
+	if !v.Valid() {
+		t.Fatalf("expected no error below threshold, got %v", v.Errors)
+	}
+}
+
+func TestPasswordUncompromised_Non200(t *testing.T) {
+	original := pwnedBaseURL
+	defer func() { pwnedBaseURL = original }()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	pwnedBaseURL = server.URL + "/"
+
+	v := createValidation()
+	if got := v.PasswordUncompromised(context.Background(), "password", "ValidPass123"); got {
+		t.Fatal("PasswordUncompromised returned true on non-200, want false")
+	}
+	if v.Errors["password"] != unverifiableMessage {
+		t.Fatalf("expected fail-closed message, got %q", v.Errors["password"])
+	}
+}
+
+func TestPasswordUncompromised_TransportError(t *testing.T) {
+	original := pwnedBaseURL
+	defer func() { pwnedBaseURL = original }()
+
+	// Stand up a server, capture its URL, then close it so the address refuses
+	// connections: a deterministic transport error with no live egress.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	deadURL := server.URL
+	server.Close()
+	pwnedBaseURL = deadURL + "/"
+
+	v := createValidation()
+	if got := v.PasswordUncompromised(context.Background(), "password", "ValidPass123"); got {
+		t.Fatal("PasswordUncompromised returned true on transport error, want false")
+	}
+	if v.Errors["password"] != unverifiableMessage {
+		t.Fatalf("expected fail-closed message, got %q", v.Errors["password"])
+	}
+}
+
+func TestPasswordUncompromised_Timeout(t *testing.T) {
+	original := pwnedBaseURL
+	defer func() { pwnedBaseURL = original }()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(50 * time.Millisecond)
+	}))
+	defer server.Close()
+	pwnedBaseURL = server.URL + "/"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	v := createValidation()
+	got := v.PasswordUncompromised(ctx, "password", "ValidPass123")
+	elapsed := time.Since(start)
+
+	if got {
+		t.Fatal("PasswordUncompromised returned true on timeout, want false")
+	}
+	if v.Errors["password"] != unverifiableMessage {
+		t.Fatalf("expected fail-closed message, got %q", v.Errors["password"])
+	}
+	// The context deadline must cut this off well before the client timeout.
+	if elapsed > 2*time.Second {
+		t.Fatalf("PasswordUncompromised took %v, expected fast failure", elapsed)
+	}
+}
+
+// TestIsEmailInPublicDomain_Cancelled proves the delegate honors context
+// cancellation and fails closed. The cancelled context aborts the resolver
+// before any egress, so this is offline.
+func TestIsEmailInPublicDomain_Cancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	v := createValidation()
+	if got := v.IsEmailInPublicDomain(ctx, "email", "someone@example.com"); got {
+		t.Fatal("IsEmailInPublicDomain returned true on cancelled context, want false")
+	}
+	if _, ok := v.Errors["email"]; !ok {
+		t.Fatal("expected error on fail, got none")
+	}
+}
 
 func TestFormatFieldName(t *testing.T) {
 	testCases := []struct {
@@ -477,8 +651,8 @@ func TestIsEmailScriptSafe(t *testing.T) {
 
 		// --- Fail cases: non-whitelisted multi-script combos -------------
 		{"hangul_plus_han_no_latin_ok", "한中@example.com", true}, // Korean+Han is whitelisted-adjacent: Han+Hangul (no Latin) — still subset of {Latin, Han, Hangul}, passes.
-		{"hangul_plus_hiragana_fail", "한ひ@example.com", false}, // Korean + Japanese hiragana — no whitelist
-		{"cyrillic_plus_greek_fail", "аα@example.com", false},  // pure spoof: Cyrillic + Greek
+		{"hangul_plus_hiragana_fail", "한ひ@example.com", false},  // Korean + Japanese hiragana — no whitelist
+		{"cyrillic_plus_greek_fail", "аα@example.com", false},   // pure spoof: Cyrillic + Greek
 
 		// --- Edge cases --------------------------------------------------
 		{"empty_string", "", true}, // ASCII-only fast path; caller chains IsEmailRFC for emptiness check
