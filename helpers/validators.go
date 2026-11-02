@@ -319,6 +319,25 @@ func (v *Validation) StringLength(field, value string, minLength, maxLength int)
 	}
 }
 
+// SliceLen validates that a slice's item count is within the specified range.
+// A min of 0 means no lower bound, so the check becomes a maximum only. An
+// empty or nil slice has a count of 0, so it fails when min is greater than 0.
+//
+// Example:
+//
+//	tags := r.Form["tags"]
+//	validator.SliceLen("tags", tags, 1, 5) // between 1-5 items
+//	validator.SliceLen("tags", tags, 0, 5) // max 5 items
+func (v *Validation) SliceLen(field string, values []string, min, max int) {
+	length := len(values)
+
+	if length < min {
+		v.AddError(field, fmt.Sprintf("The %s field must contain at least %d items", field, min))
+	} else if length > max {
+		v.AddError(field, fmt.Sprintf("The %s field must not contain more than %d items", field, max))
+	}
+}
+
 // NoSpaces validates that a field contains no whitespace characters.
 // Useful for usernames, slugs, or other fields that shouldn't contain spaces.
 //
