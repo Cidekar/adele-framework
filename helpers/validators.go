@@ -21,16 +21,6 @@ import (
 	"github.com/fatih/camelcase"
 )
 
-// pwnedRequestTimeout bounds the live HaveIBeenPwned lookup. It matches the
-// IsEmailMX live-lookup timeout so the two network validators behave the same
-// under a slow or unreachable upstream.
-const pwnedRequestTimeout = 10 * time.Second
-
-// pwnedBaseURL is the HaveIBeenPwned range endpoint. It is a package var, not a
-// const, so tests can point it at a local httptest server without hitting the
-// real API.
-var pwnedBaseURL = "https://api.pwnedpasswords.com/range/"
-
 // Validation holds the data being validated along with any accumulated
 // validation errors. Data contains the source form values being checked,
 // and Errors maps a field name to its first reported error message.
@@ -250,20 +240,19 @@ func (v *Validation) IsEmail(field, value string) {
 	}
 }
 
-// IsEmailInPublicDomain validates that an email address domain can receive mail.
-// The name is historical; the check now delegates to IsEmailMX, so it honors the
-// caller's context for timeout and cancellation and is fail-closed. It assumes
-// the value already passed IsEmail format validation (both call sites run IsEmail
-// first), and records an error via AddError on failure.
+// IsEmailInPublicDomain validates that an email address exists and is in a public domain.
+// Uses govalidator's existence check which may perform DNS lookups.
 //
 // Example:
 //
 //	email := r.Form.Get("email")
-//	validator.IsEmailInPublicDomain(r.Context(), "email", email)
+//	validator.IsEmailInPublicDomain("email", email)
 //
-// Returns true on pass, false on fail.
-func (v *Validation) IsEmailInPublicDomain(ctx context.Context, field, value string) bool {
-	return v.IsEmailMX(ctx, field, value)
+// Checks if email domain is reachable and public
+func (v *Validation) IsEmailInPublicDomain(field, value string) {
+	if !govalidator.IsExistingEmail(value) {
+		v.AddError(field, "Invalid email address")
+	}
 }
 
 // IsInt validates that a field contains a valid integer value.
@@ -330,27 +319,34 @@ func (v *Validation) StringLength(field, value string, minLength, maxLength int)
 	}
 }
 
-// EachStringLength validates that every element in a slice is within the length
-// range. Bounds are inclusive and measured in bytes. A min of 0 means no lower
-// bound. Only the first out-of-range element records an error, so a field gets
-// one error even if several elements fail. An empty or nil slice passes because
-// there is nothing to check.
+// SliceLen validates that a string slice's item count is within the specified
+// range. Bounds are inclusive and should satisfy 0 <= min <= max; min = 0 means
+// no lower bound, so the check becomes a maximum only. An empty or nil slice has
+// a count of 0, so it fails when min is greater than 0. SliceLen bounds the
+// count after the slice is already in memory, so it is a correctness bound and
+// not the primary defense against oversized request bodies; that is an upstream
+// body-size limit.
 //
 // Example:
 //
 //	tags := r.Form["tags"]
-//	validator.EachStringLength("tags", tags, 2, 20) // each tag 2-20 chars
-func (v *Validation) EachStringLength(field string, values []string, min, max int) {
-	for _, value := range values {
-		length := len(value)
+//	validator.SliceLen("tags", tags, 1, 5) // between 1-5 items
+//	validator.SliceLen("tags", tags, 0, 5) // max 5 items
+func (v *Validation) SliceLen(field string, values []string, min, max int) {
+	length := len(values)
 
-		if length < min {
-			v.AddError(field, fmt.Sprintf("Each %s entry must be at least %d characters", field, min))
-			return
-		} else if length > max {
-			v.AddError(field, fmt.Sprintf("Each %s entry must not exceed %d characters", field, max))
-			return
+	if length < min {
+		noun := "items"
+		if min == 1 {
+			noun = "item"
 		}
+		v.AddError(field, fmt.Sprintf("The %s field must contain at least %d %s", field, min, noun))
+	} else if length > max {
+		noun := "items"
+		if max == 1 {
+			noun = "item"
+		}
+		v.AddError(field, fmt.Sprintf("The %s field must not contain more than %d %s", field, max, noun))
 	}
 }
 
@@ -366,6 +362,22 @@ func (v *Validation) EachStringLength(field string, values []string, min, max in
 func (v *Validation) NoSpaces(field, value string) {
 	if govalidator.HasWhitespace(value) {
 		v.AddError(field, "Spaces are not allowed")
+	}
+}
+
+// In validates that a field's value is a member of the allowed set using an
+// exact, case-sensitive string match. An empty allowed set means no value is
+// valid (fail-closed), so the field always gets an error.
+//
+// Example:
+//
+//	role := r.Form.Get("role")
+//	validator.In("role", role, "admin", "editor", "viewer")
+//
+// Accepts "admin", but rejects "Admin" (case-sensitive) and "owner"
+func (v *Validation) In(field, value string, allowed ...string) {
+	if !govalidator.IsIn(value, allowed...) {
+		v.AddError(field, "This field must be one of the allowed values")
 	}
 }
 
@@ -435,27 +447,18 @@ func (v *Validation) Password(field string, value string, length ...int) {
 // HaveIBeenPwned API with k-anonymity (only sends first 5 chars of SHA1 hash).
 // Optional threshold parameter sets minimum breach count to trigger error (default: 1).
 //
-// The check is fail-closed: a network or API failure blocks the field (adds an
-// error and returns false) rather than silently passing a password that could
-// not be verified. Operator detail (status codes, URLs, transport errors) goes
-// to the log only; the user-facing message stays generic.
-//
 // Example:
 //
 //	password := r.Form.Get("password")
-//	validator.PasswordUncompromised(r.Context(), "password", password)     // Any breach count fails
-//	validator.PasswordUncompromised(r.Context(), "password", password, 5)  // Only fails if seen 5+ times
+//	validator.PasswordUncompromised("password", password)     // Any breach count fails
+//	validator.PasswordUncompromised("password", password, 5)  // Only fails if seen 5+ times
 //
-// Returns true on pass, false on fail.
-func (v *Validation) PasswordUncompromised(ctx context.Context, field string, value string, threshold ...int) bool {
+// Checks against HaveIBeenPwned database securely
+func (v *Validation) PasswordUncompromised(field string, value string, threshold ...int) {
 	thresholdVerifier := 1
 	if len(threshold) > 0 {
 		thresholdVerifier = threshold[0]
 	}
-
-	// Message for any path where we could not reach a verdict. It must not leak
-	// status codes or URLs; those stay in the operator log.
-	const unverifiableMessage = "Could not verify the password against the breach database. Please try again."
 
 	// Create SHA1 hash of password
 	hasher := sha1.New()
@@ -464,39 +467,32 @@ func (v *Validation) PasswordUncompromised(ctx context.Context, field string, va
 	hashPrefix := hash[0:5]
 	hashSuffix := hash[5:]
 
-	// Query HaveIBeenPwned API with k-anonymity. pwnedBaseURL keeps its trailing
-	// slash, so a plain concatenation yields exactly one separator.
-	uri := pwnedBaseURL + hashPrefix
-	req, err := http.NewRequestWithContext(ctx, "GET", uri, nil)
+	// Query HaveIBeenPwned API with k-anonymity
+	uri := fmt.Sprintf("https://api.pwnedpasswords.com/range/%s", hashPrefix)
+	req, err := http.NewRequest("GET", uri, nil)
 	if err != nil {
 		log.Printf("Error creating request for password validation: %s\n", err)
-		v.AddError(field, unverifiableMessage)
-		return false
+		return
 	}
 	req.Header.Set("Add-Padding", "true")
 
-	// Both the context and the client timeout bound the request: belt and
-	// suspenders in case the caller passes a context without a deadline.
-	client := &http.Client{Timeout: pwnedRequestTimeout}
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("Error making password validation request: %s\n", err)
-		v.AddError(field, unverifiableMessage)
-		return false
+		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("Password validation API returned status %d. Unable to verify password.\n", resp.StatusCode)
-		v.AddError(field, unverifiableMessage)
-		return false
+		return
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("Error reading password validation response: %s\n", err)
-		v.AddError(field, unverifiableMessage)
-		return false
+		return
 	}
 
 	// Parse response and check for our password hash
@@ -515,11 +511,9 @@ func (v *Validation) PasswordUncompromised(ctx context.Context, field string, va
 
 		if pwnedHash == hashSuffix && pwnedCount >= thresholdVerifier {
 			v.AddError(field, "The password provided was discovered in a recent data leak; please select another password.")
-			return false
+			break
 		}
 	}
-
-	return true
 }
 
 // IsEmailScriptSafe validates that value does not mix Unicode scripts in a
