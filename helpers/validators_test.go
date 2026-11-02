@@ -395,6 +395,67 @@ func TestValidation_Password(t *testing.T) {
 	}
 }
 
+func TestValidation_EachStringLength(t *testing.T) {
+	// All elements within range - should pass
+	v := createValidation()
+	v.EachStringLength("tags", []string{"go", "rust", "python"}, 2, 10)
+	if _, exists := v.Errors["tags"]; exists {
+		t.Error("Should not have error when all elements are within range")
+	}
+
+	// One element below min - should fail
+	v2 := createValidation()
+	v2.EachStringLength("tags", []string{"go", "x", "rust"}, 2, 10)
+	if _, exists := v2.Errors["tags"]; !exists {
+		t.Error("Should have error when an element is below min length")
+	}
+
+	// One element above max - should fail
+	v3 := createValidation()
+	v3.EachStringLength("tags", []string{"go", "rust", "overlylongtag"}, 2, 10)
+	if _, exists := v3.Errors["tags"]; !exists {
+		t.Error("Should have error when an element exceeds max length")
+	}
+
+	// Exact min and max boundary elements - should pass
+	v4 := createValidation()
+	v4.EachStringLength("tags", []string{"ab", "abcdefghij"}, 2, 10)
+	if _, exists := v4.Errors["tags"]; exists {
+		t.Error("Should not have error for elements at exact min and max boundaries")
+	}
+
+	// Empty slice - should pass even with min > 0
+	v5 := createValidation()
+	v5.EachStringLength("tags", []string{}, 2, 10)
+	if _, exists := v5.Errors["tags"]; exists {
+		t.Error("Should not have error for empty slice")
+	}
+
+	// Nil slice - should pass
+	v6 := createValidation()
+	v6.EachStringLength("tags", nil, 2, 10)
+	if _, exists := v6.Errors["tags"]; exists {
+		t.Error("Should not have error for nil slice")
+	}
+
+	// min = 0 with elements under max - should pass
+	v7 := createValidation()
+	v7.EachStringLength("tags", []string{"", "go", "rust"}, 0, 10)
+	if _, exists := v7.Errors["tags"]; exists {
+		t.Error("Should not have error when min is 0 and elements are under max")
+	}
+
+	// Two out-of-range elements - only one error recorded (first-write-wins)
+	v8 := createValidation()
+	v8.EachStringLength("tags", []string{"overlylongtag", "anotherlongtag"}, 2, 10)
+	if _, exists := v8.Errors["tags"]; !exists {
+		t.Error("Should have error when elements exceed max length")
+	}
+	if len(v8.Errors) != 1 {
+		t.Errorf("Should record exactly one error, got %d", len(v8.Errors))
+	}
+}
+
 func TestValidation_Valid(t *testing.T) {
 	// Test validation with no errors
 	v1 := createValidation()
@@ -477,8 +538,8 @@ func TestIsEmailScriptSafe(t *testing.T) {
 
 		// --- Fail cases: non-whitelisted multi-script combos -------------
 		{"hangul_plus_han_no_latin_ok", "한中@example.com", true}, // Korean+Han is whitelisted-adjacent: Han+Hangul (no Latin) — still subset of {Latin, Han, Hangul}, passes.
-		{"hangul_plus_hiragana_fail", "한ひ@example.com", false}, // Korean + Japanese hiragana — no whitelist
-		{"cyrillic_plus_greek_fail", "аα@example.com", false},  // pure spoof: Cyrillic + Greek
+		{"hangul_plus_hiragana_fail", "한ひ@example.com", false},  // Korean + Japanese hiragana — no whitelist
+		{"cyrillic_plus_greek_fail", "аα@example.com", false},   // pure spoof: Cyrillic + Greek
 
 		// --- Edge cases --------------------------------------------------
 		{"empty_string", "", true}, // ASCII-only fast path; caller chains IsEmailRFC for emptiness check

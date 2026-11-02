@@ -319,6 +319,30 @@ func (v *Validation) StringLength(field, value string, minLength, maxLength int)
 	}
 }
 
+// EachStringLength validates that every element in a slice is within the length
+// range. Bounds are inclusive and measured in bytes. A min of 0 means no lower
+// bound. Only the first out-of-range element records an error, so a field gets
+// one error even if several elements fail. An empty or nil slice passes because
+// there is nothing to check.
+//
+// Example:
+//
+//	tags := r.Form["tags"]
+//	validator.EachStringLength("tags", tags, 2, 20) // each tag 2-20 chars
+func (v *Validation) EachStringLength(field string, values []string, min, max int) {
+	for _, value := range values {
+		length := len(value)
+
+		if length < min {
+			v.AddError(field, fmt.Sprintf("Each %s entry must be at least %d characters", field, min))
+			return
+		} else if length > max {
+			v.AddError(field, fmt.Sprintf("Each %s entry must not exceed %d characters", field, max))
+			return
+		}
+	}
+}
+
 // NoSpaces validates that a field contains no whitespace characters.
 // Useful for usernames, slugs, or other fields that shouldn't contain spaces.
 //
