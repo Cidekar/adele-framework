@@ -34,7 +34,7 @@ import (
 // Example:
 //
 //	body, _ := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
-//	ok := helpers.VerifyHMACSHA256(secret, "sha256=", body, r.Header.Get("X-Hub-Signature-256"))
+//	ok := a.Helpers.VerifyHMACSHA256(secret, "sha256=", body, r.Header.Get("X-Hub-Signature-256"))
 func VerifyHMACSHA256(secret, prefix string, body []byte, header string) bool {
 	if secret == "" {
 		return false
@@ -56,4 +56,11 @@ func VerifyHMACSHA256(secret, prefix string, body []byte, header string) bool {
 	got := mac.Sum(nil)
 
 	return hmac.Equal(got, want)
+}
+
+// VerifyHMACSHA256 verifies a signed webhook, forwarding to the package-level
+// VerifyHMACSHA256 function. See that function for the fail-closed contract and
+// MaxBytesReader guidance.
+func (h *Helpers) VerifyHMACSHA256(secret, prefix string, body []byte, header string) bool {
+	return VerifyHMACSHA256(secret, prefix, body, header)
 }
