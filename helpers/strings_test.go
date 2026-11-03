@@ -58,3 +58,83 @@ func TestRandomString_EmptyLength(t *testing.T) {
 		t.Errorf("Expected empty string for length 0, got: %s", result)
 	}
 }
+
+func TestIsEmpty(t *testing.T) {
+	h := &Helpers{}
+
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{
+			name:     "Empty string",
+			input:    "",
+			expected: true,
+		},
+		{
+			name:     "Single space",
+			input:    " ",
+			expected: false,
+		},
+		{
+			name:     "Non-empty string",
+			input:    "x",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := h.IsEmpty(tt.input)
+			if result != tt.expected {
+				t.Errorf("IsEmpty(%q) = %v, want %v", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsBlank(t *testing.T) {
+	h := &Helpers{}
+
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{
+			name:     "Empty string",
+			input:    "",
+			expected: true,
+		},
+		{
+			name:     "Only spaces",
+			input:    "   ",
+			expected: true,
+		},
+		{
+			name:     "Tab and newline",
+			input:    "\t\n",
+			expected: true,
+		},
+		{
+			name:     "Non-blank string",
+			input:    "x",
+			expected: false,
+		},
+		{
+			name:     "String padded with spaces",
+			input:    " x ",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := h.IsBlank(tt.input)
+			if result != tt.expected {
+				t.Errorf("IsBlank(%q) = %v, want %v", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
