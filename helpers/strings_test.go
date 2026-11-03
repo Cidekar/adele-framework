@@ -92,6 +92,15 @@ func TestIsEmpty(t *testing.T) {
 			}
 		})
 	}
+
+	for _, tt := range tests {
+		t.Run("Package "+tt.name, func(t *testing.T) {
+			result := IsEmpty(tt.input)
+			if result != tt.expected {
+				t.Errorf("IsEmpty(%q) = %v, want %v", tt.input, result, tt.expected)
+			}
+		})
+	}
 }
 
 func TestIsBlank(t *testing.T) {
@@ -132,6 +141,15 @@ func TestIsBlank(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := h.IsBlank(tt.input)
+			if result != tt.expected {
+				t.Errorf("IsBlank(%q) = %v, want %v", tt.input, result, tt.expected)
+			}
+		})
+	}
+
+	for _, tt := range tests {
+		t.Run("Package "+tt.name, func(t *testing.T) {
+			result := IsBlank(tt.input)
 			if result != tt.expected {
 				t.Errorf("IsBlank(%q) = %v, want %v", tt.input, result, tt.expected)
 			}

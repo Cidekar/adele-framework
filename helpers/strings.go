@@ -65,12 +65,12 @@ func (h *Helpers) IsBlank(s string) bool {
 	return IsBlank(s)
 }
 
-// IsEmpty reports whether s is the empty string
+// IsEmpty reports whether s is the empty string.
 func IsEmpty(s string) bool {
 	return s == ""
 }
 
-// IsBlank reports whether s is empty or only whitespace
+// IsBlank reports whether s is empty or only whitespace.
 func IsBlank(s string) bool {
 	return strings.TrimSpace(s) == ""
 }
